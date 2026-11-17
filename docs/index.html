@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ND5RC FCR Cup Scout | 個人売買監視＆お気に入り比較ダッシュボード</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans JP', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans JP', sans-serif;
+      background-color: #090d16;
+      color: #f3f4f6;
+      overflow-x: hidden;
+    }
+    .rank-card-S {
+      border: 2px solid #ef4444;
+      box-shadow: 0 0 22px rgba(239, 68, 68, 0.22);
+    }
+    .rank-card-A {
+      border: 2px solid #f97316;
+      box-shadow: 0 0 18px rgba(249, 115, 22, 0.16);
+    }
+    .rank-card-B {
+      border: 2px solid #3b82f6;
+      box-shadow: 0 0 14px rgba(59, 130, 246, 0.14);
+    }
+    .rank-card-C {
+      border: 1px solid #374151;
+    }
+    .rank-card-IGNORED {
+      border: 1px dashed #4b5563;
+      opacity: 0.72;
+    }
+    .fav-star-active {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #ffffff;
+      border-color: #fbbf24;
+      box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+    }
+    .ignore-btn-active {
+      background: linear-gradient(135deg, #4b5563, #1f2937);
+      color: #fca5a5;
+      border-color: #ef4444;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#090d16] text-gray-100 selection:bg-red-600 selection:text-white">
+
+  <!-- Top Header -->
+  <header class="sticky top-0 z-30 bg-[#090d16]/95 backdrop-blur-md border-b border-gray-800">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-rose-800 flex items-center justify-center font-black text-lg tracking-tighter shadow-lg shadow-red-900/40">
+          38
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-black tracking-tight text-white">ND5RC FCR CUP SCOUT</h1>
+            <span id="statusPill" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-950/90 text-emerald-400 border border-emerald-700/60">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="statusText">監視中 (15分)</span>
+            </span>
+          </div>
+          <p class="text-xs text-gray-400">富士チャンピオンレース ロードスターカップ 個人売買自動監視システム</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex flex-wrap items-center gap-1 bg-gray-900/90 p-1 rounded-xl border border-gray-800">
+        <button id="tabBtnList" type="button" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all bg-red-600 text-white shadow flex items-center gap-1.5">
+          <span>車両一覧</span>
+        </button>
+        <button id="tabBtnCompare" type="button" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all text-gray-400 hover:text-white flex items-center gap-1.5">
+          <span>★ お気に入り比較</span>
+          <span id="navFavCountBadge" class="px-1.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">2</span>
+        </button>
+        <button id="tabBtnControl" type="button" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all text-gray-400 hover:text-white flex items-center gap-1.5">
+          <span>監視・配点・通知拒否設定</span>
+          <span id="navIgnoredCountBadge" class="px-1.5 py-0.5 rounded-full text-[11px] font-black bg-gray-800 text-gray-300 border border-gray-700">0</span>
+        </button>
+        <button id="tabBtnSimulator" type="button" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all text-gray-400 hover:text-white flex items-center gap-1.5">
+          <span>判定テスト</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-6">
+
+    <!-- ==================== TAB 1: VEHICLE LIST ==================== -->
+    <section id="viewList" class="space-y-5">
+
+      <!-- KPI Summary Bar -->
+      <div class="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
+        <div class="bg-gray-900/80 border border-red-900/50 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-red-400">Sランク (70pt+)</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">★即決・最優先</p>
+          </div>
+          <span id="kpiCountS" class="text-2xl font-black text-red-400">0</span>
+        </div>
+        <div class="bg-gray-900/80 border border-orange-900/50 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-orange-400">Aランク (40-69pt)</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">有力候補</p>
+          </div>
+          <span id="kpiCountA" class="text-2xl font-black text-orange-400">0</span>
+        </div>
+        <div class="bg-gray-900/80 border border-blue-900/50 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-blue-400">Bランク (15-39pt)</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">ベース車候補</p>
+          </div>
+          <span id="kpiCountB" class="text-2xl font-black text-blue-400">0</span>
+        </div>
+        <div class="bg-gray-900/80 border border-amber-700/50 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-gray-800/80 transition" id="kpiCardFavJump" title="タップしてお気に入り比較画面を開く">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-amber-400">★ お気に入り</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">比較画面へ →</p>
+          </div>
+          <span id="kpiCountFav" class="text-2xl font-black text-amber-400">0</span>
+        </div>
+        <div class="bg-gray-900/80 border border-gray-700/80 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-gray-800/80 transition" id="kpiCardIgnoredToggle" title="タップして興味なし車両の表示/非表示を切り替え">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-rose-300">🚫 興味なし遮断</p>
+            <p id="kpiIgnoredSubText" class="text-[11px] text-gray-400 mt-0.5">一覧から非表示中</p>
+          </div>
+          <span id="kpiCountIgnored" class="text-2xl font-black text-gray-300">0</span>
+        </div>
+        <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">LINE通知稼働</p>
+            <p id="lastUpdatedLabel" class="text-[10px] text-gray-400 mt-0.5">最終巡回: --</p>
+          </div>
+          <span id="kpiCountNotified" class="text-2xl font-black text-emerald-400">0</span>
+        </div>
+      </div>
+
+      <!-- Filter & Quick Template Mode Bar -->
+      <div class="bg-gray-900/90 border border-gray-800 rounded-2xl p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <!-- Sort & Filters -->
+          <div class="flex flex-wrap items-center gap-2">
+            <label for="sortSelect" class="text-xs font-bold text-gray-400">並び順:</label>
+            <select id="sortSelect" class="bg-gray-950 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-red-500">
+              <option value="score_desc">マッチ度ポイント順（降順）</option>
+              <option value="date_desc">新着順（検出日時順）</option>
+              <option value="price_asc">価格が安い順</option>
+            </select>
+
+            <label for="rankFilter" class="text-xs font-bold text-gray-400 ml-1">ランク:</label>
+            <select id="rankFilter" class="bg-gray-950 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-red-500">
+              <option value="ALL">すべて表示</option>
+              <option value="S">Sランクのみ (70pt+)</option>
+              <option value="A">Aランク以上 (40pt+)</option>
+              <option value="B">Bランク以上 (15pt+)</option>
+              <option value="C">Cランク (0-14pt)</option>
+            </select>
+
+            <label for="sourceFilter" class="text-xs font-bold text-gray-400 ml-1">出品元:</label>
+            <select id="sourceFilter" class="bg-gray-950 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-red-500">
+              <option value="ALL">全サイト (X/ヤフオク/メルカリ/ジモティー)</option>
+              <option value="X">X (旧Twitter)</option>
+              <option value="ヤフオク">ヤフオク (個人出品)</option>
+              <option value="メルカリ">メルカリ</option>
+              <option value="ジモティー">ジモティー</option>
+            </select>
+
+            <button id="btnFilterFavOnly" type="button" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-700 bg-gray-950 text-gray-300 hover:border-amber-400 transition flex items-center gap-1">
+              <span>☆ お気に入りのみ</span>
+            </button>
+
+            <button id="btnToggleShowIgnored" type="button" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-700 bg-gray-950 text-gray-400 hover:border-rose-400 transition flex items-center gap-1">
+              <span>🚫 興味なし車両を表示 (0)</span>
+            </button>
+          </div>
+
+          <!-- 5-Second Contact Template Mode Switch -->
+          <div class="flex items-center gap-2 bg-gray-950 px-3 py-1.5 rounded-xl border border-gray-800">
+            <span class="text-xs font-bold text-gray-300">「5秒連絡」コピー文面:</span>
+            <button id="tplModeX" type="button" class="px-2.5 py-1 rounded-md text-xs font-bold bg-red-600 text-white transition">
+              X (DM用)
+            </button>
+            <button id="tplModeFlea" type="button" class="px-2.5 py-1 rounded-md text-xs font-bold text-gray-400 hover:text-white transition">
+              フリマ・質問欄用
+            </button>
+          </div>
+        </div>
+
+        <!-- Preview of Current Copy Template -->
+        <div class="bg-gray-950/80 border border-gray-800/80 rounded-xl px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="text-xs text-gray-300 leading-relaxed">
+            <span class="font-bold text-red-400 mr-1">[ワンタップ定型文プレビュー]</span>
+            <span id="templatePreviewText">はじめまして。掲載されたNDロードスターをぜひ購入したく連絡いたしました。現金一括での迅速なお支払いと、名義変更等のスムーズな手続きをお約束できます。現在、現車確認に伺える日時はございますでしょうか？</span>
+          </div>
+          <button id="btnCopyGlobalTemplate" type="button" class="shrink-0 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-200 border border-gray-700 transition">
+            文面のみコピー
+          </button>
+        </div>
+      </div>
+
+      <!-- Vehicle Cards Grid (1 photo + Favorite Toggle + Ignored Toggle on each card) -->
+      <div id="vehicleGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- ==================== TAB 2: FAVORITES COMPARISON SCREEN ==================== -->
+    <section id="viewCompare" class="hidden space-y-5">
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <span class="text-amber-400">★</span>
+              <span>お気に入り車両 横並び徹底比較画面</span>
+            </h2>
+            <p class="text-xs text-gray-400 mt-0.5">
+              お気に入りフラグ（★）を立てた候補車両の「車両写真（1枚）」「価格・FCR改装コスト試算」「FCR必須6項目チェックマトリクス」「主要スペック・検討メモ」を一画面で比較できます。
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="btnSyncFavoritesGithub" type="button" class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white shadow transition">
+              💾 お気に入り・興味なし状態をGitHubへ保存
+            </button>
+            <button id="btnBackToListFromCompare" type="button" class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-200 border border-gray-700 transition">
+              ＋ 車両一覧から候補を追加・変更
+            </button>
+          </div>
+        </div>
+
+        <!-- Summary Recommendation Banner -->
+        <div id="compareSummaryBanner" class="bg-gradient-to-r from-amber-950/50 via-red-950/40 to-gray-900 border border-amber-700/50 rounded-xl p-4"></div>
+
+        <!-- Horizontal Comparison Matrix Table -->
+        <div id="compareTableWrapper" class="overflow-x-auto rounded-xl border border-gray-800 bg-gray-950"></div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: CONTROL PANEL (GITHUB API & CONFIG & IGNORED LIST) ==================== -->
+    <section id="viewControl" class="hidden space-y-6">
+
+      <!-- Ignored Vehicles Management Panel (Notification Block List) -->
+      <div class="bg-gray-900 border border-rose-900/50 rounded-2xl p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-black text-white flex items-center gap-2">
+              <span>🚫 「興味なし（通知ブロック）」フラグ設定済み車両・再出品遮断リスト</span>
+            </h2>
+            <p class="text-xs text-gray-400 mt-0.5">
+              車両カードの「🚫 興味なし」ボタンを押した車両は、一覧から非表示になると同時に <b>IDおよびタイトル正規化シグネチャ</b> が記録され、値下げ再出品や再投稿時のLINE通知も自動的にブロックされます。
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btnCommitIgnoredList" type="button" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white shadow transition">
+              💾 興味なし遮断リストをGitHubへコミット反映
+            </button>
+            <button id="btnClearAllIgnored" type="button" class="px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-300 border border-gray-700 transition">
+              すべて解除
+            </button>
+          </div>
+        </div>
+
+        <div id="ignoredVehiclesListContainer" class="space-y-2"></div>
+
+        <!-- Ignored Seller / Specific Phrase Input -->
+        <div class="bg-gray-950 border border-gray-800 rounded-xl p-3.5 space-y-2">
+          <label for="cfgIgnoredSellerKeywords" class="block text-xs font-bold text-gray-300">
+            追加の通知拒否アカウント名・固有フレーズ（カンマ区切り・該当する出品はLINE通知を強制ブロック）
+          </label>
+          <input
+            id="cfgIgnoredSellerKeywords"
+            type="text"
+            placeholder="例: 〇〇オート, 修復歴あり現状, サーキットクラッシュ歴"
+            class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+          />
+        </div>
+      </div>
+
+      <!-- Token Lock & GitHub API Authentication Card -->
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-base font-black text-white flex items-center gap-2">
+              <span>🔐 GitHub API トークン認証ロック（localStorage保存）</span>
+            </h2>
+            <p class="text-xs text-gray-400 mt-0.5">
+              Publicリポジトリ運用のため、PAT（Personal Access Token）はブラウザの <code class="text-red-400">localStorage</code> にのみ保存され、コードや外部サーバーには一切送信・記録されません。
+            </p>
+          </div>
+          <span id="authStatusBadge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-800 text-gray-400 border border-gray-700">
+            未ロック解除
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="inputRepo" class="block text-xs font-bold text-gray-300 mb-1">対象リポジトリ (owner/repo)</label>
+            <input id="inputRepo" type="text" placeholder="例: momomatya/nd5rc-fcr-monitor" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500" />
+          </div>
+          <div>
+            <label for="inputBranch" class="block text-xs font-bold text-gray-300 mb-1">対象ブランチ</label>
+            <input id="inputBranch" type="text" value="main" placeholder="main" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500" />
+          </div>
+        </div>
+
+        <div>
+          <label for="inputPat" class="block text-xs font-bold text-gray-300 mb-1">GitHub Personal Access Token (Fine-grained PAT: Contents & Workflows Read/Write)</label>
+          <input id="inputPat" type="password" placeholder="github_pat_xxxxxxxxxxxxxxxxx または ghp_xxxxxxxxxxxx" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500" />
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 pt-1">
+          <button id="btnSaveAuth" type="button" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs sm:text-sm font-bold text-white shadow transition">
+            認証情報をブラウザに保存
+          </button>
+          <button id="btnClearAuth" type="button" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs sm:text-sm font-bold text-gray-300 border border-gray-700 transition">
+            保存トークンを消去
+          </button>
+          <button id="btnTriggerWorkflow" type="button" class="ml-auto px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-xs sm:text-sm font-bold text-white transition">
+            🚀 今すぐ手動巡回を実行 (workflow_dispatch)
+          </button>
+        </div>
+      </div>
+
+      <!-- Monitoring Interval Controls -->
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div>
+          <h2 class="text-base font-black text-white">⏱️ 監視スパン変更（GitHub Actions cron ＆ 稼働制御）</h2>
+          <p class="text-xs text-gray-400 mt-0.5">
+            選択して反映ボタンを押すと、GitHub REST API経由で <code class="text-amber-300">.github/workflows/monitor.yml</code> の cron スケジュールおよび <code class="text-amber-300">data/config.json</code> を直接書き換えてコミットします。
+          </p>
+        </div>
+
+        <div id="intervalButtonsGrid" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          <button type="button" data-interval="5分" data-cron="*/5 * * * *" data-enabled="true" class="interval-btn px-3 py-2.5 rounded-xl border border-gray-700 bg-gray-950 text-xs font-bold text-gray-300 hover:border-red-500 transition">
+            5分間隔<br><span class="text-[10px] text-gray-400 font-mono">*/5 * * * *</span>
+          </button>
+          <button type="button" data-interval="15分" data-cron="*/15 * * * *" data-enabled="true" class="interval-btn px-3 py-2.5 rounded-xl border border-red-500 bg-red-950/40 text-xs font-bold text-white transition">
+            15分間隔<br><span class="text-[10px] text-red-300 font-mono">*/15 * * * *</span>
+          </button>
+          <button type="button" data-interval="30分" data-cron="*/30 * * * *" data-enabled="true" class="interval-btn px-3 py-2.5 rounded-xl border border-gray-700 bg-gray-950 text-xs font-bold text-gray-300 hover:border-red-500 transition">
+            30分間隔<br><span class="text-[10px] text-gray-400 font-mono">*/30 * * * *</span>
+          </button>
+          <button type="button" data-interval="1時間" data-cron="0 * * * *" data-enabled="true" class="interval-btn px-3 py-2.5 rounded-xl border border-gray-700 bg-gray-950 text-xs font-bold text-gray-300 hover:border-red-500 transition">
+            1時間間隔<br><span class="text-[10px] text-gray-400 font-mono">0 * * * *</span>
+          </button>
+          <button type="button" data-interval="半日（12時間）" data-cron="0 */12 * * *" data-enabled="true" class="interval-btn px-3 py-2.5 rounded-xl border border-gray-700 bg-gray-950 text-xs font-bold text-gray-300 hover:border-red-500 transition">
+            半日（12時間）<br><span class="text-[10px] text-gray-400 font-mono">0 */12 * * *</span>
+          </button>
+          <button type="button" data-interval="1日（24時間）" data-cron="0 9 * * *" data-enabled="true" class="interval-btn px-3 py-2.5 rounded-xl border border-gray-700 bg-gray-950 text-xs font-bold text-gray-300 hover:border-red-500 transition">
+            1日（24時間）<br><span class="text-[10px] text-gray-400 font-mono">0 9 * * *</span>
+          </button>
+          <button type="button" data-interval="監視停止" data-cron="0 0 31 2 *" data-enabled="false" class="interval-btn px-3 py-2.5 rounded-xl border border-gray-700 bg-gray-950 text-xs font-bold text-rose-400 hover:border-rose-500 transition">
+            ⏸️ 監視停止<br><span class="text-[10px] text-gray-400 font-mono">enabled: false</span>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div class="text-xs text-gray-300">
+            選択中: <span id="selectedIntervalSummary" class="font-bold text-amber-400">15分 (cron: */15 * * * *)</span>
+          </div>
+          <button id="btnCommitInterval" type="button" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs sm:text-sm font-bold text-white shadow transition">
+            監視スパンをGitHubへコミット反映
+          </button>
+        </div>
+      </div>
+
+      <!-- Scoring & Filter Tuning Panel -->
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div>
+          <h2 class="text-base font-black text-white">🎯 価格フィルタ＆スコアリング配点チューニング</h2>
+          <p class="text-xs text-gray-400 mt-0.5">
+            下限価格、LINE通知温存しきい値（150万円以上ノーマルスキップ）、および各カテゴリの加点キーワード・配点を編集して <code class="text-amber-300">data/config.json</code> にコミットできます。
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-gray-950 border border-gray-800 rounded-xl p-3">
+            <label for="cfgMinPrice" class="block text-xs font-bold text-gray-300">下限価格フィルタ（万円超）</label>
+            <p class="text-[11px] text-gray-400 mb-2">この金額以下はパーツ・不動車として除外</p>
+            <input id="cfgMinPrice" type="number" value="60" min="10" max="300" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm font-bold text-white" />
+          </div>
+          <div class="bg-gray-950 border border-gray-800 rounded-xl p-3">
+            <label for="cfgBonusMaxPrice" class="block text-xs font-bold text-gray-300">価格ボーナス上限（万円以下）</label>
+            <p class="text-[11px] text-gray-400 mb-2">下限超〜この金額以下で +10pt 加点</p>
+            <input id="cfgBonusMaxPrice" type="number" value="120" min="60" max="300" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm font-bold text-white" />
+          </div>
+          <div class="bg-gray-950 border border-gray-800 rounded-xl p-3">
+            <label for="cfgSkipLineOver" class="block text-xs font-bold text-gray-300">LINE温存しきい値（万円以上）</label>
+            <p class="text-[11px] text-gray-400 mb-2">この金額以上かつ競技加点なしはLINE通知スキップ</p>
+            <input id="cfgSkipLineOver" type="number" value="150" min="80" max="400" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm font-bold text-white" />
+          </div>
+        </div>
+
+        <div id="scoringRulesContainer" class="space-y-3"></div>
+
+        <div class="bg-gray-950 border border-gray-800 rounded-xl p-3.5">
+          <label for="cfgExcludeKeywords" class="block text-xs font-bold text-gray-300 mb-1">共通除外キーワード（カンマ区切り）</label>
+          <input id="cfgExcludeKeywords" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white" />
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
+          <button id="btnApplyLocalConfig" type="button" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs sm:text-sm font-bold text-gray-200 border border-gray-700 transition">
+            画面上の車両一覧に即時テスト反映
+          </button>
+          <button id="btnCommitConfig" type="button" class="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs sm:text-sm font-bold text-white shadow transition">
+            💾 data/config.json をGitHubへ更新コミット
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: LIVE SCORING & FILTER SIMULATOR ==================== -->
+    <section id="viewSimulator" class="hidden space-y-5">
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div>
+          <h2 class="text-base font-black text-white">🧪 出品テキスト・スコアリング＆通知遮断フィルタ検証シミュレーター</h2>
+          <p class="text-xs text-gray-400 mt-0.5">
+            Xのポスト本文やヤフオク・メルカリ・ジモティーの出品文を貼り付けて、FCRカップ戦スコアリング（100pt満点）、興味なしフラグによるLINE通知ブロック、月200通温存フィルタの挙動をテストできます。
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label for="simSource" class="block text-xs font-bold text-gray-300 mb-1">出品元サイト</label>
+            <select id="simSource" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-xs font-bold text-white">
+              <option value="X">X（旧Twitter）※価格未記載・DM特例あり</option>
+              <option value="ヤフオク">ヤフオク（個人出品）</option>
+              <option value="メルカリ">メルカリ</option>
+              <option value="ジモティー">ジモティー</option>
+            </select>
+          </div>
+          <div>
+            <label for="simPriceMan" class="block text-xs font-bold text-gray-300 mb-1">車両価格（万円・空欄なら本文から自動抽出）</label>
+            <input id="simPriceMan" type="number" step="0.1" placeholder="例: 108" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+          </div>
+          <div>
+            <label for="simUrl" class="block text-xs font-bold text-gray-300 mb-1">出品元URL</label>
+            <input id="simUrl" type="url" value="https://x.com/search?q=ND5RC" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+          </div>
+          <div>
+            <label for="simPhotoSelect" class="block text-xs font-bold text-gray-300 mb-1">車両写真（1枚）</label>
+            <select id="simPhotoSelect" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-xs font-bold text-white">
+              <option value="s">白 NR-A（FCRパドック・TE37）</option>
+              <option value="a">セラメタ NR-A（純正16インチ）</option>
+              <option value="b">ソウルレッド Sスペ（ノーマル）</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label for="simTitle" class="block text-xs font-bold text-gray-300 mb-1">出品タイトル / ポスト1行目</label>
+          <input id="simTitle" type="text" value="【個人売買】H27年式 DBA-ND5RC ロードスター NR-A 6MT クスコLSD サイトウロールケージ TE37 SONIC" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+        </div>
+
+        <div>
+          <label for="simDesc" class="block text-xs font-bold text-gray-300 mb-1">出品説明文 / ポスト全文</label>
+          <textarea id="simDesc" rows="3" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white">富士チャンピオンレース（FCR）ロードスターカップ参戦を見据えて製作した2015年式（H27）NR-A 6MTです。走行5.8万km。CUSCO 1.5WAY機械式LSD、6点式ロールバー、TE37 SONIC 16インチ 7J装着。手元108万円で譲ります。</textarea>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="btnRunSim" type="button" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs sm:text-sm font-bold text-white shadow transition">
+            判定を実行する
+          </button>
+          <button id="btnAddSimToDashboard" type="button" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs sm:text-sm font-bold text-white shadow transition">
+            ★ お気に入り状態で一覧＆比較画面に追加
+          </button>
+        </div>
+
+        <div id="simResultBox" class="bg-gray-950 border border-gray-800 rounded-xl p-4 text-xs space-y-2"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Photo Lightbox Modal (1枚写真を拡大表示) -->
+  <div id="photoLightbox" class="fixed inset-0 z-50 hidden bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="relative max-w-3xl w-full bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden shadow-2xl">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+        <h3 id="lightboxTitle" class="text-xs sm:text-sm font-bold text-white truncate pr-4">車両写真プレビュー</h3>
+        <button id="btnCloseLightbox" type="button" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-300">
+          ✕ 閉じる
+        </button>
+      </div>
+      <div class="bg-black flex items-center justify-center max-h-[75vh] overflow-hidden">
+        <img id="lightboxImg" src="" alt="拡大車両写真" class="w-full h-auto max-h-[75vh] object-contain" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 pointer-events-none flex flex-col gap-2"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

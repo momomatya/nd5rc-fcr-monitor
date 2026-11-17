@@ -1,0 +1,132 @@
+{
+  "monitoring": {
+    "enabled": true,
+    "interval_label": "15分",
+    "cron": "*/15 * * * *",
+    "min_price_man": 60,
+    "skip_line_normal_over_man": 150,
+    "price_bonus_max_man": 120
+  },
+  "queries": {
+    "x": "(\"NDロードスター\" OR \"ND5RC\" OR \"ロードスター ND\") (\"売ります\" OR \"譲ります\" OR \"個人売買\" OR \"手元\" OR \"降りる\") -業者 -買取",
+    "yahoo": "ND5RC ロードスター MT",
+    "mercari": "NDロードスター MT 車体",
+    "jmty": "NDロードスター MT"
+  },
+  "exclude_keywords": [
+    "AT",
+    "オートマ",
+    "AT車",
+    "オートマチック",
+    "部品取り",
+    "パーツのみ",
+    "ミニカー",
+    "トミカ",
+    "プラモデル",
+    "バンパーのみ",
+    "ホイールのみ",
+    "シートのみ",
+    "マフラーのみ",
+    "幌のみ",
+    "ヘッドライトのみ",
+    "テールランプのみ",
+    "純正トルセンのみ"
+  ],
+  "scoring_rules": [
+    {
+      "id": "race_ready",
+      "category": "レース即戦力",
+      "points": 40,
+      "keywords": [
+        "FCR",
+        "富士チャンピオンレース",
+        "ロードスターカップ",
+        "パーティレース",
+        "パーティーレース",
+        "カップカー"
+      ]
+    },
+    {
+      "id": "grade_nra",
+      "category": "最優先グレード",
+      "points": 25,
+      "keywords": [
+        "NR-A",
+        "NRA"
+      ]
+    },
+    {
+      "id": "drivetrain_lsd",
+      "category": "必須駆動系",
+      "points": 20,
+      "keywords": [
+        "機械式LSD",
+        "LSD",
+        "2WAY",
+        "1.5WAY",
+        "クスコ",
+        "CUSCO",
+        "OS技研",
+        "デフ"
+      ],
+      "negative_keywords": [
+        "純正LSD",
+        "純正トルセン",
+        "トルセンLSDのみ",
+        "ノーマルデフ"
+      ]
+    },
+    {
+      "id": "safety_rollbar",
+      "category": "必須安全装備",
+      "points": 15,
+      "keywords": [
+        "ロールバー",
+        "ロールケージ",
+        "6点式",
+        "サイトウロールケージ",
+        "オクヤマ"
+      ]
+    },
+    {
+      "id": "wheel_te37",
+      "category": "指定ホイール",
+      "points": 15,
+      "keywords": [
+        "TE37",
+        "SONIC",
+        "7J",
+        "16インチ"
+      ]
+    },
+    {
+      "id": "target_model_year",
+      "category": "ターゲット型式・年式",
+      "points": 15,
+      "keywords": [
+        "DBA-ND5RC",
+        "DBA-",
+        "2015年",
+        "2016年",
+        "2017年",
+        "H27",
+        "H28",
+        "H29"
+      ]
+    }
+  ],
+  "price_bonus": {
+    "id": "price_bonus",
+    "category": "価格ボーナス（60万超〜120万以下）",
+    "points": 10,
+    "min_exclusive_man": 60,
+    "max_inclusive_man": 120
+  },
+  "templates": {
+    "x_dm": "はじめまして。掲載されたNDロードスターをぜひ購入したく連絡いたしました。現金一括での迅速なお支払いと、名義変更等のスムーズな手続きをお約束できます。現在、現車確認に伺える日時はございますでしょうか？",
+    "flea_comment": "はじめまして。出品されているNDロードスターの購入を真剣に検討しております。現金一括での迅速なお支払いとスムーズな名義変更をお約束いたします。現車確認に伺える候補日時はございますでしょうか？よろしくお願いいたします。"
+  },
+  "ignored_vehicle_ids": [],
+  "ignored_title_signatures": [],
+  "ignored_seller_keywords": []
+}

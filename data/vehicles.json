@@ -1,0 +1,162 @@
+{
+  "last_updated": "2026-11-17T09:45:00+09:00",
+  "seen_ids": [
+    "x_18579201938471",
+    "yahoo_k1149283741",
+    "jmty_tokyo_car_992817"
+  ],
+  "vehicles": [
+    {
+      "id": "x_18579201938471",
+      "source": "X",
+      "title": "【個人売買】H28年式 ND5RC ロードスター NR-A 6MT 富士チャンピオンレース（FCR）/ パーティレース仕様 手元115万",
+      "description": "車両入れ替えのため降ります。2016年式（H28）DBA-ND5RC NR-A 6MT。走行78,400km、車検2027年10月まで。サイトウロールケージ6点式ロールバー、クスコRS 1.5WAY機械式LSD、RAYS VOLK RACING TE37 SONIC 16インチ 7J装着。FCRロードスターカップ即参戦可能。現車確認歓迎（神奈川県）、手元115万。",
+      "price_man": 115.0,
+      "price_display": "115万円（手元）",
+      "url": "https://x.com/search?q=ND5RC%20NR-A%20%E5%A3%B2%E3%82%8A%E3%81%BE%E3%81%99",
+      "thumbnail": "assets/car_s.jpg",
+      "favorite": true,
+      "specs": {
+        "year": "2016年 (H28)",
+        "grade": "NR-A (6MT)",
+        "mileage": "78,400 km",
+        "shaken": "2027年10月",
+        "lsd": "CUSCO RS 1.5WAY 機械式LSD",
+        "rollbar": "サイトウロールケージ 6点式",
+        "wheel": "RAYS TE37 SONIC 16×7J",
+        "location": "神奈川県"
+      },
+      "score": 100,
+      "raw_score": 140,
+      "rank": "S",
+      "badges": [
+        {
+          "label": "FCR/パーティレース",
+          "points": 40,
+          "category": "レース即戦力"
+        },
+        {
+          "label": "NR-A",
+          "points": 25,
+          "category": "最優先グレード"
+        },
+        {
+          "label": "機械式LSD/クスコ",
+          "points": 20,
+          "category": "必須駆動系"
+        },
+        {
+          "label": "6点式ロールバー",
+          "points": 15,
+          "category": "必須安全装備"
+        },
+        {
+          "label": "TE37 SONIC 16インチ 7J",
+          "points": 15,
+          "category": "指定ホイール"
+        },
+        {
+          "label": "DBA-ND5RC (2016/H28)",
+          "points": 15,
+          "category": "ターゲット型式・年式"
+        },
+        {
+          "label": "60〜120万円圏内",
+          "points": 10,
+          "category": "価格ボーナス"
+        }
+      ],
+      "detected_at": "2026-11-17T08:40:12+09:00",
+      "notified_line": true,
+      "skip_reason": null,
+      "ignored": false
+    },
+    {
+      "id": "yahoo_k1149283741",
+      "source": "ヤフオク",
+      "title": "【個人出品・売り切り】平成27年 マツダ ロードスター NR-A (DBA-ND5RC) 6MT OS技研LSD オクヤマロールバー装着",
+      "description": "個人出品のため消費税不要です。2015年式（H27）初期型DBA-ND5RC グレードNR-A 6速MT。走行64,200km、車検2027年5月。OS技研スーパーロックLSD及びオクヤマ6点式ロールケージ装着済み。純正16インチガンメタホイール。サーキットベースやロードスターカップ製作ベースに最適です（埼玉県）。",
+      "price_man": 128.0,
+      "price_display": "128万円",
+      "url": "https://auctions.yahoo.co.jp/search/search?p=ND5RC+NR-A+MT",
+      "thumbnail": "assets/car_a.jpg",
+      "favorite": true,
+      "specs": {
+        "year": "2015年 (H27)",
+        "grade": "NR-A (6MT)",
+        "mileage": "64,200 km",
+        "shaken": "2027年5月",
+        "lsd": "OS技研 スーパーロックLSD",
+        "rollbar": "オクヤマ 6点式ロールケージ",
+        "wheel": "純正16インチアルミ (ガンメタ)",
+        "location": "埼玉県"
+      },
+      "score": 75,
+      "raw_score": 75,
+      "rank": "S",
+      "badges": [
+        {
+          "label": "NR-A",
+          "points": 25,
+          "category": "最優先グレード"
+        },
+        {
+          "label": "LSD/OS技研",
+          "points": 20,
+          "category": "必須駆動系"
+        },
+        {
+          "label": "ロールバー/オクヤマ",
+          "points": 15,
+          "category": "必須安全装備"
+        },
+        {
+          "label": "DBA-ND5RC (2015/H27)",
+          "points": 15,
+          "category": "ターゲット型式・年式"
+        }
+      ],
+      "detected_at": "2026-11-17T07:15:00+09:00",
+      "notified_line": true,
+      "skip_reason": null,
+      "ignored": false
+    },
+    {
+      "id": "jmty_tokyo_car_992817",
+      "source": "ジモティー",
+      "title": "マツダ NDロードスター Sスペシャルパッケージ 6MT 2017年式（H29）DBA-ND5RC フルノーマル美車",
+      "description": "2017年式（H29）DBA-ND5RC S Special Package 6MTです。走行42,800km、車検2028年3月まで。サーキット走行歴なし、屋内保管のフルノーマル車両です。純正トルセンLSD装着。現車確認は週末に対応可能です（千葉県）。",
+      "price_man": 158.0,
+      "price_display": "158万円",
+      "url": "https://jmty.jp/all/car-maz/g-all/a-all?keyword=ND5RC+MT",
+      "thumbnail": "assets/car_b.jpg",
+      "favorite": false,
+      "specs": {
+        "year": "2017年 (H29)",
+        "grade": "S Special Package (6MT)",
+        "mileage": "42,800 km",
+        "shaken": "2028年3月",
+        "lsd": "純正トルセンLSD（機械式なし）",
+        "rollbar": "未装着（ノーマル）",
+        "wheel": "純正16インチアルミ",
+        "location": "千葉県"
+      },
+      "score": 15,
+      "raw_score": 15,
+      "rank": "B",
+      "badges": [
+        {
+          "label": "DBA-ND5RC (2017/H29)",
+          "points": 15,
+          "category": "ターゲット型式・年式"
+        }
+      ],
+      "detected_at": "2026-11-17T06:00:00+09:00",
+      "notified_line": false,
+      "skip_reason": "150万円以上かつ競技系加点キーワード（NR-A/LSD/ロールバー/TE37/レース仕様）なしのためLINE通知を温存スキップ",
+      "ignored": false
+    }
+  ],
+  "ignored_ids": [],
+  "ignored_signatures": []
+}
