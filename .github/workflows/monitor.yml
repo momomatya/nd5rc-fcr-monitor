@@ -3,7 +3,7 @@ name: ND Roadster FCR Monitor
 on:
   schedule:
     # デフォルト: 15分間隔（コントロールパネルから動的に書き換え可能）
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
