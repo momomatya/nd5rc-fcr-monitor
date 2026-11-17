@@ -1,17 +1,11 @@
 {
   "monitoring": {
     "enabled": true,
-    "interval_label": "15分",
-    "cron": "*/15 * * * *",
+    "interval_label": "5分",
+    "cron": "*/5 * * * *",
     "min_price_man": 60,
     "skip_line_normal_over_man": 150,
     "price_bonus_max_man": 120
-  },
-  "queries": {
-    "x": "(\"NDロードスター\" OR \"ND5RC\" OR \"ロードスター ND\") (\"売ります\" OR \"譲ります\" OR \"個人売買\" OR \"手元\" OR \"降りる\") -業者 -買取",
-    "yahoo": "ND5RC ロードスター MT",
-    "mercari": "NDロードスター MT 車体",
-    "jmty": "NDロードスター MT"
   },
   "exclude_keywords": [
     "AT",
@@ -28,10 +22,11 @@
     "シートのみ",
     "マフラーのみ",
     "幌のみ",
-    "ヘッドライトのみ",
-    "テールランプのみ",
     "純正トルセンのみ"
   ],
+  "ignored_vehicle_ids": [],
+  "ignored_title_signatures": [],
+  "ignored_seller_keywords": [],
   "scoring_rules": [
     {
       "id": "race_ready",
@@ -125,8 +120,5 @@
   "templates": {
     "x_dm": "はじめまして。掲載されたNDロードスターをぜひ購入したく連絡いたしました。現金一括での迅速なお支払いと、名義変更等のスムーズな手続きをお約束できます。現在、現車確認に伺える日時はございますでしょうか？",
     "flea_comment": "はじめまして。出品されているNDロードスターの購入を真剣に検討しております。現金一括での迅速なお支払いとスムーズな名義変更をお約束いたします。現車確認に伺える候補日時はございますでしょうか？よろしくお願いいたします。"
-  },
-  "ignored_vehicle_ids": [],
-  "ignored_title_signatures": [],
-  "ignored_seller_keywords": []
+  }
 }
