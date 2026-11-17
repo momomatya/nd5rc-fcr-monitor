@@ -5,6 +5,11 @@ on:
     - cron: '*/15 * * * *'
   workflow_dispatch:
 
+# 定期巡回と手動巡回が重なった場合、古い方を止めて競合を防ぐ
+concurrency:
+  group: nd5rc-fcr-monitor-group
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -39,10 +44,13 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+          cp data/vehicles.json /tmp/vehicles_latest.json
+          git fetch origin main
+          git reset --hard origin/main
+          cp /tmp/vehicles_latest.json data/vehicles.json
           git add data/vehicles.json
           if ! git diff --staged --quiet; then
             git commit -m "chore(monitor): update detected vehicles [skip ci]"
-            git pull --rebase origin main || true
             git push origin main
           else
             echo "No changes to commit."
