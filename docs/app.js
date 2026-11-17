@@ -1625,32 +1625,89 @@ async function githubUpdateFile(filePath, mutatorFn, commitMessage) {
   }
 }
 
-async function loadRemoteJsonFiles() {
-  if (location.protocol === "file:" || location.hostname === "" || window.__STANDALONE_PREVIEW__) {
-    return;
+async function loadRemoteJsonFiles(showFeedback = false) {
+  const icon = document.getElementById("iconTopRefresh");
+  if (icon && showFeedback) {
+    icon.classList.add("animate-spin");
   }
-  const candidatePaths = ["../data", "./data"];
-  for (const base of candidatePaths) {
+
+  let loaded = false;
+  const bust = `t=${Date.now()}`;
+
+  // 1. PAT & リポジトリ設定済みの場合は GitHub REST API (キャッシュなし最新コミット直読み) を最優先で試行
+  const pat = safeGetStorage(STORAGE_KEYS.PAT).trim();
+  const repo = safeGetStorage(STORAGE_KEYS.REPO).trim();
+  const branch = safeGetStorage(STORAGE_KEYS.BRANCH, "main").trim() || "main";
+
+  if (pat && repo) {
     try {
-      const [cfgRes, vehRes] = await Promise.all([
-        fetch(`${base}/config.json`, { cache: "no-store" }),
-        fetch(`${base}/vehicles.json`, { cache: "no-store" })
+      const headers = {
+        Authorization: `Bearer ${pat}`,
+        Accept: "application/vnd.github+json"
+      };
+      const [cfgApiRes, vehApiRes] = await Promise.all([
+        fetch(`https://api.github.com/repos/${repo}/contents/data/config.json?ref=${encodeURIComponent(branch)}&${bust}`, { headers, cache: "no-store" }),
+        fetch(`https://api.github.com/repos/${repo}/contents/data/vehicles.json?ref=${encodeURIComponent(branch)}&${bust}`, { headers, cache: "no-store" })
       ]);
-      if (cfgRes.ok && vehRes.ok) {
-        const cfgJson = await cfgRes.json();
-        const vehJson = await vehRes.json();
+      if (cfgApiRes.ok && vehApiRes.ok) {
+        const cfgMeta = await cfgApiRes.json();
+        const vehMeta = await vehApiRes.json();
+        const cfgJson = JSON.parse(decodeUtf8Base64(cfgMeta.content || ""));
+        const vehJson = JSON.parse(decodeUtf8Base64(vehMeta.content || ""));
         appState.config = cfgJson;
         (vehJson.ignored_ids || []).forEach((id) => appState.ignoredIds.add(id));
         (vehJson.ignored_signatures || []).forEach((s) =>
           appState.ignoredSignatures.add(s)
         );
-        appState.vehicles = (vehJson.vehicles || []).map((v) =>
-          evaluateVehicleClient(v, appState.config)
-        );
-        appState.lastUpdated = vehJson.last_updated || appState.lastUpdated;
-        break;
+        appState.vehicles = (vehJson.vehicles || [])
+          .map((v) => evaluateVehicleClient(v, appState.config))
+          .filter((v) => !v.excluded);
+        appState.lastUpdated = vehJson.last_updated || new Date().toISOString();
+        loaded = true;
       }
     } catch (e) {}
+  }
+
+  // 2. 相対パス (GitHub Pages 配信ファイル) からキャッシュバスター付きで取得
+  if (!loaded && location.protocol !== "file:" && location.hostname !== "" && !window.__STANDALONE_PREVIEW__) {
+    const candidatePaths = ["../data", "./data"];
+    for (const base of candidatePaths) {
+      try {
+        const [cfgRes, vehRes] = await Promise.all([
+          fetch(`${base}/config.json?${bust}`, { cache: "no-store" }),
+          fetch(`${base}/vehicles.json?${bust}`, { cache: "no-store" })
+        ]);
+        if (cfgRes.ok && vehRes.ok) {
+          const cfgJson = await cfgRes.json();
+          const vehJson = await vehRes.json();
+          appState.config = cfgJson;
+          (vehJson.ignored_ids || []).forEach((id) => appState.ignoredIds.add(id));
+          (vehJson.ignored_signatures || []).forEach((s) =>
+            appState.ignoredSignatures.add(s)
+          );
+          appState.vehicles = (vehJson.vehicles || [])
+            .map((v) => evaluateVehicleClient(v, appState.config))
+            .filter((v) => !v.excluded);
+          appState.lastUpdated = vehJson.last_updated || appState.lastUpdated;
+          loaded = true;
+          break;
+        }
+      } catch (e) {}
+    }
+  }
+
+  if (icon && showFeedback) {
+    setTimeout(() => icon.classList.remove("animate-spin"), 350);
+  }
+  if (showFeedback) {
+    renderDashboard();
+    renderComparisonView();
+    renderConfigEditor();
+    if (loaded) {
+      showToast(`🔄 最新データを読み込みました！（表示対象: ${appState.vehicles.filter((v) => !v.ignored).length}件）`);
+    } else {
+      showToast("🔄 画面データを再評価・更新しました", "info");
+    }
   }
 }
 
@@ -1761,6 +1818,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (e.target.id === "photoLightbox") closeLightbox();
   });
 
+  document.getElementById("btnTopRefreshData")?.addEventListener("click", () => {
+    loadRemoteJsonFiles(true);
+  });
+  document.getElementById("kpiCardRefresh")?.addEventListener("click", () => {
+    loadRemoteJsonFiles(true);
+  });
+  document.getElementById("btnTopTriggerPatrol")?.addEventListener("click", () => {
+    document.getElementById("btnTriggerWorkflow")?.click();
+  });
   document.getElementById("kpiCardFavJump")?.addEventListener("click", () => {
     document.getElementById("tabBtnCompare")?.click();
   });
