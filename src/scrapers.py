@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 X（旧Twitter）、ヤフオク、メルカリ、ジモティー スクレイピングモジュール
-（Playwright ヘッドレスChromium + X車体売却厳密フィルタ + 4媒体取得強化版）
+（直近投稿限定・Snowflake日時判定・リプライ/雑談完全除外・メルカリ車体金額抽出強化版）
 """
 
 import asyncio
@@ -29,18 +29,37 @@ DEFAULT_HEADERS = {
     "Accept-Language": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
+# Twitter/X Snowflake Epoch (2010-11-04 01:42:54.657 UTC)
+TWITTER_EPOCH_MS = 1288834974657
+
 # X投稿が「NDロードスター車体の個人売買（売り）」であるかを判定する厳密パターン
 X_VEHICLE_MODEL_RE = re.compile(r"(?:ND5RC|ND\s*ロードスター|ロードスター\s*ND|NR-A)", re.IGNORECASE)
-X_SALE_INTENT_RE = re.compile(
-    r"(?:売ります|売りたし|売却|個人売買|車売ります|車両売却|譲ります|引き取って|降りる|降りま|手元\s*\d|万円)"
+
+# 強い売却意思シグナル（これが入っていれば確実に出品系）
+X_STRONG_SALE_RE = re.compile(
+    r"(?:車両売却|車売ります|#車売ります|#個人売買|個人売買|売りたし|売ります|譲ります)"
 )
+
+# 車両スペック記載シグナル（距離・年式・車検・MT・手元金額など）
+X_CAR_SPEC_SIGNAL_RE = re.compile(
+    r"(?:走行|距離|\d+(?:\.\d+)?\s*万\s*(?:km|キロ)|[\d,]+\s*km|車検|年式|H2[789]|H30|R[1-8]|201[5-9]年|202[0-6]年|6MT|6速|手元\s*\d+|\d+\s*万円|NR-A|LSD|ロールバー|ロールケージ)",
+    re.IGNORECASE,
+)
+
+# 確実に弾くノイズ（業者入庫・買取・雑談・リプライ・パーツ単体・グッズ）
 X_NOISE_EXCLUDE_RE = re.compile(
     r"(?:"
-    r"買取させていただきました|ご成約|入庫しました|下取り|カババ|"
-    r"売りたい人探してます|買います|探しています|探してます|募集|"
-    r"(?:純正|社外|RS)?\s*(?:レカロ|RECARO|シート|マフラー|ホイール|車高調|バンパー|ステアリング|幌|ハードトップ|フライホイール|ナンバーステー|エンジン|ミッション|デフ|LSD|ブレーキ|キャリパー|パッド|ロールバー|ボス|スイッチ)[^。、\n]{0,18}(?:売ります|譲ります|引き取って|出品)|"
-    r"PS5|ゲオ|セリカ|SWのターボ"
+    r"買取させていただきました|ご成約|新規入庫|入庫車|入庫しました|下取り|カババ|見積もり|ディーラーで|"
+    r"売りたい人探してます|買います|探しています|探してます|募集|繋がろう|"
+    r"(?:純正|社外|RS)?\s*(?:レカロ|RECARO|シート|マフラー|ホイール|車高調|バンパー|ステアリング|幌|ハードトップ|フライホイール|ナンバーステー|エンジン|ミッション|デフ|LSD|ブレーキ|キャリパー|パッド|ロールバー|ボス|スイッチ|リア周り|フロント周り|一式)[^。、\n]{0,18}(?:売ります|譲ります|引き取って|出品)|"
+    r"部品取り|廃車|二束三文|PS5|ゲオ|セリカ|SWのターボ"
     r")",
+    re.IGNORECASE,
+)
+
+# メルカリ等のタイトルで「明らかに車体ではなく小物・パーツ」のものを弾くパターン
+MERCARI_PARTS_EXCLUDE_RE = re.compile(
+    r"(?:フィルター|カバー|ネット|追加画像|一式|マフラー|ホイール|シート|レカロ|車高調|ステアリング|バンパー|幌|ライト|テール|エンブレム|ミニカー|トミカ|カタログ|キーホルダー|マット|シフトノブ|ペダル|ナビ|モニター|ドラレコ|キャリア|スペーサー|ナット|パッド|ローター|アーム|スタビ|タワーバー)",
     re.IGNORECASE,
 )
 
@@ -49,18 +68,56 @@ def now_iso_jst() -> str:
     return datetime.now(JST).isoformat(timespec="seconds")
 
 
-def is_valid_x_car_sale_post(text: str) -> bool:
+def tweet_id_to_datetime_jst(tweet_id: str) -> Optional[datetime]:
     """
-    Xのポスト本文が「NDロードスター車体の売却投稿」であり、
-    日常雑談・買取業者宣伝・パーツ単体売り・買いたい募集ではないことを判定する。
+    X (Twitter) の Snowflake ID (64bit整数) から正確な投稿日時 (JST) を算出する。
     """
-    if not text or text.startswith("RT @"):
+    if not tweet_id or not tweet_id.isdigit():
+        return None
+    try:
+        tid = int(tweet_id)
+        if tid < 100000000000000:
+            return None
+        timestamp_ms = (tid >> 22) + TWITTER_EPOCH_MS
+        return datetime.fromtimestamp(timestamp_ms / 1000.0, tz=JST)
+    except Exception:
+        return None
+
+
+def is_recent_tweet(tweet_id: str, max_age_days: int = 14) -> bool:
+    """
+    指定日数（デフォルト14日）以内に投稿された新しいポストかどうかを判定する。
+    2023年などの古いポストを100%確実にシャットアウトする。
+    """
+    dt = tweet_id_to_datetime_jst(tweet_id)
+    if not dt:
+        return True
+    age = datetime.now(JST) - dt
+    return age <= timedelta(days=max_age_days)
+
+
+def is_valid_x_car_sale_post(text: str, is_reply: bool = False) -> bool:
+    """
+    Xのポスト本文が「NDロードスター車体の個人売買（売り）」であり、
+    リプライ・日常雑談・買取業者宣伝・パーツ単体売りではないことを厳密に判定する。
+    """
+    if not text or is_reply:
         return False
-    if not X_VEHICLE_MODEL_RE.search(text):
+    stripped = text.strip()
+    # リツイートや他ユーザーへのリプライ（@から始まる投稿）は除外
+    if stripped.startswith("RT @") or stripped.startswith("@"):
         return False
-    if not X_SALE_INTENT_RE.search(text):
+    # 短すぎる雑談（「わかる」等）は車体出品ではないため除外
+    if len(stripped) < 25:
         return False
-    if X_NOISE_EXCLUDE_RE.search(text):
+    if not X_VEHICLE_MODEL_RE.search(stripped):
+        return False
+    if not X_STRONG_SALE_RE.search(stripped):
+        return False
+    # 売却ワードがあっても車両スペック（年式・距離・車検・MT・金額・NR-A等）が1つも無い雑談は除外
+    if not X_CAR_SPEC_SIGNAL_RE.search(stripped):
+        return False
+    if X_NOISE_EXCLUDE_RE.search(stripped):
         return False
     return True
 
@@ -112,10 +169,10 @@ def _parse_cookies_for_playwright(cookies_raw: str) -> List[Dict[str, Any]]:
     return pw_cookies
 
 
-def _extract_tweets_from_graphql_payload(payload: Any) -> List[Dict[str, Any]]:
+def _extract_tweets_from_graphql_payload(payload: Any, max_age_days: int = 14) -> List[Dict[str, Any]]:
     """
     XのSearchTimeline GraphQLレスポンスJSONからツイート情報を再帰的に抽出し、
-    車体売却フィルタを通過したものだけ返す。
+    「直近max_age_days日以内」かつ「車体売却フィルタ通過」のものだけ返す。
     """
     extracted: List[Dict[str, Any]] = []
     seen_ids = set()
@@ -128,8 +185,17 @@ def _extract_tweets_from_graphql_payload(payload: Any) -> List[Dict[str, Any]]:
                 tweet_id = str(rest_id)
                 if tweet_id not in seen_ids:
                     seen_ids.add(tweet_id)
+                    # 1. Snowflake IDによる厳密な投稿日時チェック（古い投稿を即座に破棄）
+                    if not is_recent_tweet(tweet_id, max_age_days=max_age_days):
+                        return
+
                     text = str(legacy.get("full_text", "")).strip()
-                    if is_valid_x_car_sale_post(text):
+                    is_reply = bool(
+                        legacy.get("in_reply_to_status_id_str")
+                        or legacy.get("in_reply_to_user_id_str")
+                    )
+                    # 2. 車体売却ポスト厳密フィルタ
+                    if is_valid_x_car_sale_post(text, is_reply=is_reply):
                         screen_name = "i/web"
                         core = node.get("core", {})
                         if isinstance(core, dict):
@@ -147,6 +213,9 @@ def _extract_tweets_from_graphql_payload(payload: Any) -> List[Dict[str, Any]]:
                         if media_list and isinstance(media_list[0], dict):
                             thumb = str(media_list[0].get("media_url_https", ""))
 
+                        post_dt = tweet_id_to_datetime_jst(tweet_id)
+                        detected_iso = post_dt.isoformat(timespec="seconds") if post_dt else now_iso_jst()
+
                         first_line = text.splitlines()[0][:80] if text else tweet_id
                         extracted.append(
                             {
@@ -154,10 +223,10 @@ def _extract_tweets_from_graphql_payload(payload: Any) -> List[Dict[str, Any]]:
                                 "source": "X",
                                 "title": f"【X個人売買】{first_line}",
                                 "description": text,
-                                "raw_price_yen": None,
+                                "raw_price_yen": _extract_price_yen_from_text(text),
                                 "url": f"https://x.com/{screen_name}/status/{tweet_id}",
                                 "thumbnail": thumb,
-                                "detected_at": now_iso_jst(),
+                                "detected_at": detected_iso,
                             }
                         )
             for val in node.values():
@@ -170,10 +239,12 @@ def _extract_tweets_from_graphql_payload(payload: Any) -> List[Dict[str, Any]]:
     return extracted
 
 
-async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str, Any]]:
+async def _fetch_x_via_playwright(
+    query: str, cookies_raw: str, max_age_days: int = 14
+) -> List[Dict[str, Any]]:
     """
     Playwright (ヘッドレスChromium) と X_COOKIES を用いて
-    Xの検索タイムライン (最新 & 話題) を開き、車体売却ポストのみを厳選取得する。
+    直近 max_age_days 日以内のX検索タイムラインを開き、車体売却ポストのみを厳選取得する。
     """
     results: List[Dict[str, Any]] = []
     seen_ids = set()
@@ -189,8 +260,9 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
         logger.warning("有効な X_COOKIES が見つからないためX検索をスキップします。")
         return results
 
-    # 複雑すぎる括弧クエリを避け、X検索エンジンが確実にヒットするシンプルなクエリ群で巡回
-    queries_to_run = [
+    # 検索クエリ自体にも since:YYYY-MM-DD と -filter:replies を付与して古い投稿・リプライを入り口で遮断
+    since_date = (datetime.now(JST) - timedelta(days=max_age_days)).strftime("%Y-%m-%d")
+    base_queries = [
         "ND5RC 車両売却",
         "ND5RC 個人売買",
         "ND5RC 売ります",
@@ -199,9 +271,7 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
         "ロードスター NR-A 売ります",
         "ロードスター 売り ND5RC",
     ]
-    if query and len(query) < 60:
-        queries_to_run.insert(0, query)
-    unique_queries = list(dict.fromkeys(q.strip() for q in queries_to_run if q.strip()))
+    queries_to_run = [f"{bq} since:{since_date} -filter:replies" for bq in base_queries]
 
     try:
         async with async_playwright() as p:
@@ -222,7 +292,7 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
                 try:
                     if "SearchTimeline" in response.url and response.status == 200:
                         data = await response.json()
-                        for item in _extract_tweets_from_graphql_payload(data):
+                        for item in _extract_tweets_from_graphql_payload(data, max_age_days=max_age_days):
                             if item["id"] not in seen_ids:
                                 seen_ids.add(item["id"])
                                 results.append(item)
@@ -231,13 +301,13 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
 
             page.on("response", handle_response)
 
-            for q in unique_queries:
+            for q in queries_to_run:
                 search_url = f"https://x.com/search?q={quote_plus(q)}&src=typed_query&f=live"
                 try:
                     await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-                    await page.wait_for_timeout(3500)
-                    await page.mouse.wheel(0, 1200)
-                    await page.wait_for_timeout(1500)
+                    await page.wait_for_timeout(3200)
+                    await page.mouse.wheel(0, 1000)
+                    await page.wait_for_timeout(1200)
 
                     articles = await page.query_selector_all("article[data-testid='tweet']")
                     for art in articles:
@@ -253,6 +323,10 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
                         if item_id in seen_ids:
                             continue
 
+                        # Snowflake IDで古い投稿を除外
+                        if not is_recent_tweet(tweet_id, max_age_days=max_age_days):
+                            continue
+
                         text_el = await art.query_selector("div[data-testid='tweetText']")
                         text = (await text_el.inner_text()).strip() if text_el else ""
                         if not is_valid_x_car_sale_post(text):
@@ -260,6 +334,9 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
 
                         img_el = await art.query_selector("div[data-testid='tweetPhoto'] img")
                         thumb = (await img_el.get_attribute("src") or "") if img_el else ""
+
+                        post_dt = tweet_id_to_datetime_jst(tweet_id)
+                        detected_iso = post_dt.isoformat(timespec="seconds") if post_dt else now_iso_jst()
 
                         seen_ids.add(item_id)
                         first_line = text.splitlines()[0][:80]
@@ -269,10 +346,10 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
                                 "source": "X",
                                 "title": f"【X個人売買】{first_line}",
                                 "description": text,
-                                "raw_price_yen": None,
+                                "raw_price_yen": _extract_price_yen_from_text(text),
                                 "url": f"https://x.com/{screen_name}/status/{tweet_id}",
                                 "thumbnail": thumb,
-                                "detected_at": now_iso_jst(),
+                                "detected_at": detected_iso,
                             }
                         )
                 except Exception as q_exc:
@@ -282,137 +359,51 @@ async def _fetch_x_via_playwright(query: str, cookies_raw: str) -> List[Dict[str
     except Exception as exc:
         logger.warning("X (Playwright) 取得中に例外が発生しました: %s", exc)
 
-    logger.info("X 厳選取得件数: %d 件", len(results))
+    logger.info("X 厳選取得件数 (直近%d日以内): %d 件", max_age_days, len(results))
     return results
 
 
 def fetch_x_posts(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    X（旧Twitter）からNDロードスター個人売買投稿を取得する。
+    X（旧Twitter）から直近のNDロードスター個人売買投稿を取得する。
     """
     cookies_raw = os.environ.get("X_COOKIES", "").strip()
     query = config.get("queries", {}).get("x", "")
+    max_age_days = int(config.get("monitoring", {}).get("max_age_days", 14))
     if not cookies_raw:
         logger.info("X_COOKIES が未設定のため、X巡回をスキップします。")
         return []
 
-    return asyncio.run(_fetch_x_via_playwright(query, cookies_raw))
-
-
-def _fallback_search_multi_engine(
-    site_domain: str,
-    keyword: str,
-    source_label: str,
-    id_prefix: str,
-    min_price_yen: int = 600001,
-) -> List[Dict[str, Any]]:
-    """
-    GitHub Actionsの海外IPからヤフオク・ジモティー・メルカリがブロックされる場合の
-    Bing RSS + Yahoo!検索 + DuckDuckGo によるマルチ検索フォールバック。
-    """
-    results: List[Dict[str, Any]] = []
-    seen_urls = set()
-    q = f"site:{site_domain} {keyword}"
-
-    # 1. Bing RSS フィード検索 (海外IPから最も安定して日本のインデックスを返せる)
-    bing_rss_url = f"https://www.bing.com/search?q={quote_plus(q)}&format=rss&setlang=ja-JP&cc=JP"
-    try:
-        resp = requests.get(bing_rss_url, headers=DEFAULT_HEADERS, timeout=15)
-        if resp.status_code == 200 and "<rss" in resp.text:
-            root = ET.fromstring(resp.text)
-            for item in root.findall(".//item"):
-                title = (item.findtext("title") or "").strip()
-                link = (item.findtext("link") or "").strip()
-                desc = (item.findtext("description") or "").strip()
-                if not link or site_domain not in link or link in seen_urls:
-                    continue
-                seen_urls.add(link)
-                combined = f"{title} {desc}"
-                price_yen = _extract_price_yen_from_text(combined)
-                if price_yen is not None and price_yen < min_price_yen:
-                    continue
-                item_key = re.sub(r"\W+", "", link[-20:])
-                results.append(
-                    {
-                        "id": f"{id_prefix}_{item_key}",
-                        "source": source_label,
-                        "title": title[:100],
-                        "description": combined,
-                        "raw_price_yen": price_yen,
-                        "url": link,
-                        "thumbnail": "",
-                        "detected_at": now_iso_jst(),
-                    }
-                )
-    except Exception as exc:
-        logger.debug("%s Bing RSS フォールバック例外: %s", source_label, exc)
-
-    # 2. DuckDuckGo Lite / HTML フォールバック
-    ddg_url = f"https://html.duckduckgo.com/html/?q={quote_plus(q)}&kl=jp-jp"
-    try:
-        resp = requests.get(ddg_url, headers=DEFAULT_HEADERS, timeout=15)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            for row in soup.select(".result"):
-                a_el = row.select_one("a.result__a")
-                snip_el = row.select_one(".result__snippet")
-                if not a_el:
-                    continue
-                title = a_el.get_text(" ", strip=True)
-                raw_href = a_el.get("href", "")
-                m_uddg = re.search(r"uddg=([^&]+)", raw_href)
-                real_url = unquote(m_uddg.group(1)) if m_uddg else raw_href
-                if site_domain not in real_url or real_url in seen_urls:
-                    continue
-                seen_urls.add(real_url)
-
-                desc = snip_el.get_text(" ", strip=True) if snip_el else title
-                combined = f"{title} {desc}"
-                price_yen = _extract_price_yen_from_text(combined)
-                if price_yen is not None and price_yen < min_price_yen:
-                    continue
-
-                item_key = re.sub(r"\W+", "", real_url[-20:])
-                results.append(
-                    {
-                        "id": f"{id_prefix}_{item_key}",
-                        "source": source_label,
-                        "title": title[:100],
-                        "description": combined,
-                        "raw_price_yen": price_yen,
-                        "url": real_url,
-                        "thumbnail": "",
-                        "detected_at": now_iso_jst(),
-                    }
-                )
-    except Exception as exc:
-        logger.debug("%s DDG フォールバック例外: %s", source_label, exc)
-
-    return results
+    return asyncio.run(_fetch_x_via_playwright(query, cookies_raw, max_age_days=max_age_days))
 
 
 def _extract_price_yen_from_text(text: str) -> Optional[int]:
     """
-    テキスト内の「115万円」「1,150,000円」「¥1,150,000」から円単位の整数を抽出する。
+    テキスト内の「115万円」「1,150,000円」「¥1,150,000」「1,150,000」から
+    車両価格帯（30万円〜1,000万円）の円単位整数を抽出する。
     """
-    m_man = re.search(r"(\d+(?:\.\d+)?)\s*万\s*円?", text)
+    if not text:
+        return None
+    # 1. 「115万円」「115万」形式
+    m_man = re.search(r"(\d{2,3}(?:\.\d+)?)\s*万\s*円?", text)
     if m_man:
         val = int(float(m_man.group(1)) * 10000)
-        if 100000 <= val <= 10000000:
+        if 300000 <= val <= 10000000:
             return val
-    m_yen = re.search(r"(?:[¥￥]\s*([\d,]{6,})|([\d,]{6,})\s*円)", text)
-    if m_yen:
-        raw = (m_yen.group(1) or m_yen.group(2) or "").replace(",", "")
+    # 2. 「¥1,150,000」「1,150,000円」またはカンマ区切り7桁「1,150,000」
+    for m_num in re.finditer(r"(?:[¥￥]\s*)?(\d{1,2},\d{3},\d{3}|\d{3},\d{3}|\d{6,7})(?:\s*円)?", text):
+        raw = m_num.group(1).replace(",", "")
         if raw.isdigit():
             val = int(raw)
-            if 100000 <= val <= 10000000:
+            if 300000 <= val <= 10000000:
                 return val
     return None
 
 
 async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) -> List[Dict[str, Any]]:
     """
-    Playwrightでメルカリの検索画面をレンダリングし、APIレスポンス傍受＋動的DOMから出品情報を抽出する。
+    Playwrightでメルカリの検索画面をレンダリングし、
+    車体価格帯（min_price_yen以上）かつパーツ単体ではない出品のみを抽出する。
     """
     results: List[Dict[str, Any]] = []
     seen_ids = set()
@@ -436,7 +427,6 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
             )
             page = await context.new_page()
 
-            # メルカリ内部API (entities:search) のJSONレスポンスも直接傍受
             async def handle_mercari_response(response: Any) -> None:
                 try:
                     if ("entities:search" in response.url or "search_index" in response.url) and response.status == 200:
@@ -452,8 +442,10 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
                                 continue
                             if not re.search(r"(?:ND5RC|ND\s*ロードスター|ロードスター)", name, re.IGNORECASE):
                                 continue
-                            price_yen = int(price_raw) if str(price_raw).isdigit() else None
-                            if price_yen is not None and price_yen < min_price_yen:
+                            if MERCARI_PARTS_EXCLUDE_RE.search(name):
+                                continue
+                            price_yen = int(price_raw) if str(price_raw).isdigit() else _extract_price_yen_from_text(name)
+                            if price_yen is None or price_yen < min_price_yen:
                                 continue
                             thumbs = it.get("thumbnails", [])
                             thumb = thumbs[0] if isinstance(thumbs, list) and thumbs else ""
@@ -510,12 +502,16 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
 
                         if not re.search(r"(?:ND5RC|ロードスター)", combined_text, re.IGNORECASE):
                             continue
-
-                        price_yen = _extract_price_yen_from_text(combined_text)
-                        if price_yen is not None and price_yen < min_price_yen:
+                        if MERCARI_PARTS_EXCLUDE_RE.search(combined_text):
                             continue
 
-                        clean_title = re.sub(r"\s+", " ", combined_text)[:100] or f"メルカリ出品 {item_id}"
+                        price_yen = _extract_price_yen_from_text(combined_text)
+                        # カード内テキストに金額が出ない場合は個別ページまたはデフォルト下限値ではなく詳細取得を試みる
+                        clean_title = re.sub(r"\s+", " ", combined_text)
+                        clean_title = re.sub(r"のサムネイル.*$", "", clean_title).strip()[:100]
+                        if not clean_title:
+                            clean_title = f"メルカリ出品 {item_id}"
+
                         seen_ids.add(item_id)
                         results.append(
                             {
@@ -532,35 +528,94 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
                 except Exception as q_exc:
                     logger.warning("メルカリ検索クエリ実行中に例外 (%s): %s", q, q_exc)
 
+            # 価格が取れなかった車体候補（最大5件）について個別ページを開いて正確な価格と説明文を補完
+            for item in results[:5]:
+                if item.get("raw_price_yen") is None:
+                    try:
+                        await page.goto(item["url"], wait_until="domcontentloaded", timeout=20000)
+                        await page.wait_for_timeout(2500)
+                        body_text = await page.inner_text("body")
+                        extracted_price = _extract_price_yen_from_text(body_text)
+                        if extracted_price:
+                            item["raw_price_yen"] = extracted_price
+                        # 説明文も補完してFCRスコア判定精度を上げる
+                        item["description"] = f"{item['title']}\n{body_text[:1500]}"
+                    except Exception:
+                        pass
+
             await browser.close()
     except Exception as exc:
         logger.warning("メルカリ (Playwright) 取得中に例外が発生しました: %s", exc)
 
-    if not results:
-        results = _fallback_search_multi_engine(
-            "jp.mercari.com/item",
-            "ND5RC ロードスター",
-            "メルカリ",
-            "mercari",
-            min_price_yen=min_price_yen,
-        )
+    # 下限価格未満や価格不明のまま残った小物を最終フィルタ
+    filtered_results = [
+        r for r in results
+        if r.get("raw_price_yen") is not None and r["raw_price_yen"] >= min_price_yen
+    ]
 
-    logger.info("メルカリ 取得件数: %d 件", len(results))
-    return results
+    logger.info("メルカリ 車体厳選取得件数: %d 件", len(filtered_results))
+    return filtered_results
 
 
 def fetch_mercari(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     メルカリ（自動車本体）からNDロードスター車体を抽出する。
-    「NDロードスター MT 車体」だと厳しすぎて0件になるため、ヒットしやすい複数クエリで検索する。
     """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
-    custom_q = config.get("queries", {}).get("mercari", "").strip()
     queries = ["ND5RC", "NDロードスター 車体", "ロードスター NR-A"]
-    if custom_q and custom_q not in queries:
-        queries.insert(0, custom_q)
-
     return asyncio.run(_fetch_mercari_via_playwright(queries, min_price_yen))
+
+
+def _fallback_search_multi_engine(
+    site_domain: str,
+    keyword: str,
+    source_label: str,
+    id_prefix: str,
+    min_price_yen: int = 600001,
+) -> List[Dict[str, Any]]:
+    """
+    GitHub Actionsの海外IPからヤフオク・ジモティーがブロックされる場合の
+    Bing RSS + DuckDuckGo によるマルチ検索フォールバック。
+    """
+    results: List[Dict[str, Any]] = []
+    seen_urls = set()
+    q = f"site:{site_domain} {keyword}"
+
+    bing_rss_url = f"https://www.bing.com/search?q={quote_plus(q)}&format=rss&setlang=ja-JP&cc=JP"
+    try:
+        resp = requests.get(bing_rss_url, headers=DEFAULT_HEADERS, timeout=15)
+        if resp.status_code == 200 and "<rss" in resp.text:
+            root = ET.fromstring(resp.text)
+            for item in root.findall(".//item"):
+                title = (item.findtext("title") or "").strip()
+                link = (item.findtext("link") or "").strip()
+                desc = (item.findtext("description") or "").strip()
+                if not link or site_domain not in link or link in seen_urls:
+                    continue
+                if MERCARI_PARTS_EXCLUDE_RE.search(title):
+                    continue
+                seen_urls.add(link)
+                combined = f"{title} {desc}"
+                price_yen = _extract_price_yen_from_text(combined)
+                if price_yen is not None and price_yen < min_price_yen:
+                    continue
+                item_key = re.sub(r"\W+", "", link[-20:])
+                results.append(
+                    {
+                        "id": f"{id_prefix}_{item_key}",
+                        "source": source_label,
+                        "title": title[:100],
+                        "description": combined,
+                        "raw_price_yen": price_yen,
+                        "url": link,
+                        "thumbnail": "",
+                        "detected_at": now_iso_jst(),
+                    }
+                )
+    except Exception as exc:
+        logger.debug("%s Bing RSS フォールバック例外: %s", source_label, exc)
+
+    return results
 
 
 async def _fetch_yahoo_via_playwright(search_url: str) -> List[Dict[str, Any]]:
@@ -631,7 +686,6 @@ def fetch_yahoo_auctions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     「個人出品のみ（ストア除外: abatch=2）」「60万円超」のNDロードスターMT車を抽出する。
     """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
-    # ヒット漏れを防ぐためシンプルな「ND5RC」を基本クエリにする
     search_url = (
         f"https://auctions.yahoo.co.jp/search/search"
         f"?p={quote_plus('ND5RC')}&auccat=26360&abatch=2&min={min_price_yen}&istatus=0&s1=new&o1=d"
