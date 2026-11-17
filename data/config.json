@@ -1,8 +1,8 @@
 {
   "monitoring": {
     "enabled": true,
-    "interval_label": "5分",
-    "cron": "*/5 * * * *",
+    "interval_label": "15分",
+    "cron": "*/15 * * * *",
     "min_price_man": 60,
     "skip_line_normal_over_man": 150,
     "price_bonus_max_man": 120
@@ -24,8 +24,16 @@
     "幌のみ",
     "純正トルセンのみ"
   ],
-  "ignored_vehicle_ids": [],
-  "ignored_title_signatures": [],
+  "ignored_vehicle_ids": [
+    "x_18579201938471",
+    "yahoo_k1149283741",
+    "jmty_tokyo_car_992817"
+  ],
+  "ignored_title_signatures": [
+    "個人売買H28年式ND5RCロードスターNRA6MT富士チャンピオンレー",
+    "個人出品売り切り平成27年マツダロードスターNRADBAND5RC6MT",
+    "マツダNDロードスターSスペシャルパッケージ6MT2017年式H29DB"
+  ],
   "ignored_seller_keywords": [],
   "scoring_rules": [
     {
