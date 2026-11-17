@@ -75,6 +75,14 @@
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               <span id="statusText">監視中 (15分)</span>
             </span>
+            <button id="btnTopRefreshData" type="button" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-95 text-white shadow transition" title="GitHubから最新の車両データを再取得して画面を更新します">
+              <span id="iconTopRefresh" class="inline-block transition-transform duration-300">🔄</span>
+              <span>最新データ読込</span>
+            </button>
+            <button id="btnTopTriggerPatrol" type="button" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white border border-emerald-500/40 shadow transition" title="GitHub Actionsの手動巡回を今すぐ起動します">
+              <span>🚀</span>
+              <span class="hidden sm:inline">今すぐ巡回</span>
+            </button>
           </div>
           <p class="text-xs text-gray-400">富士チャンピオンレース ロードスターカップ 個人売買自動監視システム</p>
         </div>
@@ -143,10 +151,10 @@
           </div>
           <span id="kpiCountIgnored" class="text-2xl font-black text-gray-300">0</span>
         </div>
-        <div class="bg-gray-900/80 border border-gray-800 rounded-xl p-3 flex items-center justify-between">
+        <div id="kpiCardRefresh" class="bg-gray-900/80 border border-blue-900/60 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-gray-800/80 active:scale-95 transition" title="タップして最新データを再読み込み">
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">LINE通知稼働</p>
-            <p id="lastUpdatedLabel" class="text-[10px] text-gray-400 mt-0.5">最終巡回: --</p>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1">🔄 情報更新 <span class="text-[10px] text-emerald-400">(LINE稼働)</span></p>
+            <p id="lastUpdatedLabel" class="text-[10px] text-gray-300 mt-0.5">最終巡回: --</p>
           </div>
           <span id="kpiCountNotified" class="text-2xl font-black text-emerald-400">0</span>
         </div>
