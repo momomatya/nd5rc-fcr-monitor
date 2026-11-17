@@ -1,7 +1,8 @@
 {
-  "last_updated": "2026-11-18T03:01:34+09:00",
+  "last_updated": "2026-11-18T04:03:31+09:00",
   "seen_ids": [
-    "mercari_m71181867718"
+    "mercari_m71181867718",
+    "x_2121961318504906805"
   ],
   "ignored_ids": [
     "jmty_tokyo_car_992817",
@@ -119,6 +120,44 @@
     "個人売買H28年式ND5RCロードスターNRA6MT富士チャンピオンレー"
   ],
   "vehicles": [
+    {
+      "id": "x_2121961318504906805",
+      "source": "X",
+      "title": "【X個人売買】【車両売却】マツダ ロードスター ND5RC",
+      "description": "【車両売却】マツダ ロードスター ND5RC\n\n2015年式 ND5RC S Leather Package\n\n・6速MT\n・セラミックメタリック\n・走行距離：約7.5万km\n・修復歴：なし\n・車検：残り2年間\n\n追加情報コメント欄\n\n#ロードスター #NDロードスター #車売ります #個人売買 https://t.co/EPLqy6LXAe",
+      "raw_price_yen": null,
+      "url": "https://x.com/cfg1254057/status/2121961318504906805",
+      "thumbnail": "https://pbs.twimg.com/media/HXK4kXSbAAAUvBU.jpg",
+      "detected_at": "2026-11-15T22:39:37+09:00",
+      "price_man": null,
+      "price_display": "価格記載なし",
+      "favorite": false,
+      "ignored": false,
+      "title_signature": "X個人売買車両売却マツダロードスターND5RC",
+      "specs": {
+        "year": "2015年",
+        "grade": "6MT（グレード要確認）",
+        "mileage": "7.5万km",
+        "shaken": "本文参照",
+        "lsd": "未記載 / 純正",
+        "rollbar": "未装着 / 未記載",
+        "wheel": "純正 / その他",
+        "location": "出品ページ参照"
+      },
+      "score": 15,
+      "raw_score": 15,
+      "rank": "B",
+      "badges": [
+        {
+          "id": "target_model_year",
+          "label": "2015年",
+          "points": 15,
+          "category": "ターゲット型式・年式"
+        }
+      ],
+      "skip_reason": null,
+      "notified_line": true
+    },
     {
       "id": "mercari_m71181867718",
       "source": "メルカリ",
