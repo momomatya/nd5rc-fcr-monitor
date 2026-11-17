@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-11-17T17:01:27+09:00",
+  "last_updated": "2026-11-17T18:03:06+09:00",
   "seen_ids": [
     "mercari_m71181867718"
   ],
@@ -147,7 +147,7 @@
       "raw_score": 0,
       "rank": "C",
       "badges": [],
-      "skip_reason": "🚫 興味なしフラグ設定中のためLINE通知をブロック（興味なし登録ID一致 (mercari_m71181867718)）",
+      "skip_reason": "🚫 興味なしフラグ設定中のためLINE通知をブロック（興味なしフラグ設定済み車両）",
       "notified_line": false
     },
     {
