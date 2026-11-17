@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 X（旧Twitter）、ヤフオク、メルカリ、ジモティー スクレイピングモジュール
-（直近投稿限定・Snowflake日時判定・リプライ/雑談完全除外・メルカリ車体金額抽出強化版）
+（Playwright ヘッドレスChromium + Snowflake直近投稿判定 + 車体売却厳密フィルタ + 4媒体取得強化版）
 """
 
 import asyncio
@@ -35,14 +35,14 @@ TWITTER_EPOCH_MS = 1288834974657
 # X投稿が「NDロードスター車体の個人売買（売り）」であるかを判定する厳密パターン
 X_VEHICLE_MODEL_RE = re.compile(r"(?:ND5RC|ND\s*ロードスター|ロードスター\s*ND|NR-A)", re.IGNORECASE)
 
-# 強い売却意思シグナル（これが入っていれば確実に出品系）
+# 強い売却意思シグナル（ハッシュタグ・車両売却・売ります・譲ります・降りる・手元金額）
 X_STRONG_SALE_RE = re.compile(
-    r"(?:車両売却|車売ります|#車売ります|#個人売買|個人売買|売りたし|売ります|譲ります)"
+    r"(?:車両売却|車売ります|#車売ります|#個人売買|個人売買|売りたし|売ります|譲ります|引き取って|降りる|降りま|売却|手元\s*\d)"
 )
 
-# 車両スペック記載シグナル（距離・年式・車検・MT・手元金額など）
+# 車両スペック記載シグナル（距離・年式・車検・MT・手元金額・主要グレード・ハッシュタグなど）
 X_CAR_SPEC_SIGNAL_RE = re.compile(
-    r"(?:走行|距離|\d+(?:\.\d+)?\s*万\s*(?:km|キロ)|[\d,]+\s*km|車検|年式|H2[789]|H30|R[1-8]|201[5-9]年|202[0-6]年|6MT|6速|手元\s*\d+|\d+\s*万円|NR-A|LSD|ロールバー|ロールケージ)",
+    r"(?:走行|距離|\d+(?:\.\d+)?\s*万\s*(?:km|キロ)|[\d,]+\s*km|車検|年式|H2[789]|H30|R[1-8]|201[5-9]\s*年?|202[0-6]\s*年?|6MT|6速|MT|手元\s*\d+|\d+\s*万円|NR-A|LSD|ロールバー|ロールケージ|Leather\s*Package|S\s*Special|RS|#車売ります|#個人売買)",
     re.IGNORECASE,
 )
 
@@ -87,11 +87,16 @@ def tweet_id_to_datetime_jst(tweet_id: str) -> Optional[datetime]:
 def is_recent_tweet(tweet_id: str, max_age_days: int = 14) -> bool:
     """
     指定日数（デフォルト14日）以内に投稿された新しいポストかどうかを判定する。
-    2023年などの古いポストを100%確実にシャットアウトする。
+    2023年などの古いポストやテスト用のサンプルIDを100%確実にシャットアウトする。
     """
+    if not tweet_id or not tweet_id.isdigit():
+        return False
+    # 18桁未満の短いダミーID（初期モックデータ等）は除外
+    if len(tweet_id) < 18:
+        return False
     dt = tweet_id_to_datetime_jst(tweet_id)
     if not dt:
-        return True
+        return False
     age = datetime.now(JST) - dt
     return age <= timedelta(days=max_age_days)
 
@@ -244,7 +249,9 @@ async def _fetch_x_via_playwright(
 ) -> List[Dict[str, Any]]:
     """
     Playwright (ヘッドレスChromium) と X_COOKIES を用いて
-    直近 max_age_days 日以内のX検索タイムラインを開き、車体売却ポストのみを厳選取得する。
+    Xの検索タイムライン（「最新 f=live」と「話題」の両方）を開き、
+    Snowflake IDで直近 max_age_days 日以内の車体売却ポストのみを厳選取得する。
+    （※X側で0件バグを引き起こす since: 演算子は使わず、シンプルな検索語＋Snowflake日時判定で確実に拾う）
     """
     results: List[Dict[str, Any]] = []
     seen_ids = set()
@@ -260,18 +267,17 @@ async def _fetch_x_via_playwright(
         logger.warning("有効な X_COOKIES が見つからないためX検索をスキップします。")
         return results
 
-    # 検索クエリ自体にも since:YYYY-MM-DD と -filter:replies を付与して古い投稿・リプライを入り口で遮断
-    since_date = (datetime.now(JST) - timedelta(days=max_age_days)).strftime("%Y-%m-%d")
-    base_queries = [
-        "ND5RC 車両売却",
-        "ND5RC 個人売買",
-        "ND5RC 売ります",
-        "NDロードスター 個人売買",
-        "NDロードスター 車売ります",
-        "ロードスター NR-A 売ります",
-        "ロードスター 売り ND5RC",
+    # シンプルでXの検索エンジンが確実に返すクエリ群
+    search_targets = [
+        ("ロードスター 売り", "live"),
+        ("ロードスター 売り", "top"),
+        ("ND5RC 車両売却", "live"),
+        ("ND5RC 個人売買", "live"),
+        ("ND5RC 売ります", "live"),
+        ("NDロードスター 売ります", "live"),
+        ("NDロードスター 個人売買", "live"),
+        ("#NDロードスター #車売ります", "live"),
     ]
-    queries_to_run = [f"{bq} since:{since_date} -filter:replies" for bq in base_queries]
 
     try:
         async with async_playwright() as p:
@@ -301,8 +307,12 @@ async def _fetch_x_via_playwright(
 
             page.on("response", handle_response)
 
-            for q in queries_to_run:
-                search_url = f"https://x.com/search?q={quote_plus(q)}&src=typed_query&f=live"
+            for q, tab_mode in search_targets:
+                if tab_mode == "live":
+                    search_url = f"https://x.com/search?q={quote_plus(q)}&src=typed_query&f=live"
+                else:
+                    search_url = f"https://x.com/search?q={quote_plus(q)}&src=typed_query"
+
                 try:
                     await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
                     await page.wait_for_timeout(3200)
@@ -323,7 +333,7 @@ async def _fetch_x_via_playwright(
                         if item_id in seen_ids:
                             continue
 
-                        # Snowflake IDで古い投稿を除外
+                        # Snowflake IDで古い投稿（14日超）を除外
                         if not is_recent_tweet(tweet_id, max_age_days=max_age_days):
                             continue
 
@@ -384,13 +394,11 @@ def _extract_price_yen_from_text(text: str) -> Optional[int]:
     """
     if not text:
         return None
-    # 1. 「115万円」「115万」形式
     m_man = re.search(r"(\d{2,3}(?:\.\d+)?)\s*万\s*円?", text)
     if m_man:
         val = int(float(m_man.group(1)) * 10000)
         if 300000 <= val <= 10000000:
             return val
-    # 2. 「¥1,150,000」「1,150,000円」またはカンマ区切り7桁「1,150,000」
     for m_num in re.finditer(r"(?:[¥￥]\s*)?(\d{1,2},\d{3},\d{3}|\d{3},\d{3}|\d{6,7})(?:\s*円)?", text):
         raw = m_num.group(1).replace(",", "")
         if raw.isdigit():
@@ -506,7 +514,6 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
                             continue
 
                         price_yen = _extract_price_yen_from_text(combined_text)
-                        # カード内テキストに金額が出ない場合は個別ページまたはデフォルト下限値ではなく詳細取得を試みる
                         clean_title = re.sub(r"\s+", " ", combined_text)
                         clean_title = re.sub(r"のサムネイル.*$", "", clean_title).strip()[:100]
                         if not clean_title:
@@ -538,7 +545,6 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
                         extracted_price = _extract_price_yen_from_text(body_text)
                         if extracted_price:
                             item["raw_price_yen"] = extracted_price
-                        # 説明文も補完してFCRスコア判定精度を上げる
                         item["description"] = f"{item['title']}\n{body_text[:1500]}"
                     except Exception:
                         pass
@@ -547,7 +553,6 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
     except Exception as exc:
         logger.warning("メルカリ (Playwright) 取得中に例外が発生しました: %s", exc)
 
-    # 下限価格未満や価格不明のまま残った小物を最終フィルタ
     filtered_results = [
         r for r in results
         if r.get("raw_price_yen") is not None and r["raw_price_yen"] >= min_price_yen
@@ -575,7 +580,7 @@ def _fallback_search_multi_engine(
 ) -> List[Dict[str, Any]]:
     """
     GitHub Actionsの海外IPからヤフオク・ジモティーがブロックされる場合の
-    Bing RSS + DuckDuckGo によるマルチ検索フォールバック。
+    Bing RSS によるフォールバック検索。
     """
     results: List[Dict[str, Any]] = []
     seen_urls = set()
