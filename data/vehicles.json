@@ -1,10 +1,12 @@
 {
-  "last_updated": "2026-11-17T09:45:00+09:00",
+  "last_updated": "2026-11-17T12:16:34+09:00",
   "seen_ids": [
-    "x_18579201938471",
     "yahoo_k1149283741",
-    "jmty_tokyo_car_992817"
+    "jmty_tokyo_car_992817",
+    "x_18579201938471"
   ],
+  "ignored_ids": [],
+  "ignored_signatures": [],
   "vehicles": [
     {
       "id": "x_18579201938471",
@@ -31,45 +33,53 @@
       "rank": "S",
       "badges": [
         {
-          "label": "FCR/パーティレース",
+          "id": "race_ready",
+          "label": "FCR/富士チャンピオンレース",
           "points": 40,
           "category": "レース即戦力"
         },
         {
+          "id": "grade_nra",
           "label": "NR-A",
           "points": 25,
           "category": "最優先グレード"
         },
         {
-          "label": "機械式LSD/クスコ",
+          "id": "drivetrain_lsd",
+          "label": "機械式LSD/LSD",
           "points": 20,
           "category": "必須駆動系"
         },
         {
-          "label": "6点式ロールバー",
+          "id": "safety_rollbar",
+          "label": "ロールバー/ロールケージ",
           "points": 15,
           "category": "必須安全装備"
         },
         {
-          "label": "TE37 SONIC 16インチ 7J",
+          "id": "wheel_te37",
+          "label": "TE37/SONIC",
           "points": 15,
           "category": "指定ホイール"
         },
         {
-          "label": "DBA-ND5RC (2016/H28)",
+          "id": "target_model_year",
+          "label": "DBA-ND5RC/DBA-",
           "points": 15,
           "category": "ターゲット型式・年式"
         },
         {
+          "id": "price_bonus",
           "label": "60〜120万円圏内",
           "points": 10,
-          "category": "価格ボーナス"
+          "category": "価格ボーナス（60万超〜120万以下）"
         }
       ],
       "detected_at": "2026-11-17T08:40:12+09:00",
       "notified_line": true,
       "skip_reason": null,
-      "ignored": false
+      "ignored": false,
+      "title_signature": "個人売買H28年式ND5RCロードスターNRA6MT富士チャンピオンレー"
     },
     {
       "id": "yahoo_k1149283741",
@@ -91,27 +101,43 @@
         "wheel": "純正16インチアルミ (ガンメタ)",
         "location": "埼玉県"
       },
-      "score": 75,
-      "raw_score": 75,
+      "score": 100,
+      "raw_score": 130,
       "rank": "S",
       "badges": [
         {
+          "id": "race_ready",
+          "label": "ロードスターカップ",
+          "points": 40,
+          "category": "レース即戦力"
+        },
+        {
+          "id": "grade_nra",
           "label": "NR-A",
           "points": 25,
           "category": "最優先グレード"
         },
         {
+          "id": "drivetrain_lsd",
           "label": "LSD/OS技研",
           "points": 20,
           "category": "必須駆動系"
         },
         {
-          "label": "ロールバー/オクヤマ",
+          "id": "safety_rollbar",
+          "label": "ロールバー/ロールケージ",
           "points": 15,
           "category": "必須安全装備"
         },
         {
-          "label": "DBA-ND5RC (2015/H27)",
+          "id": "wheel_te37",
+          "label": "16インチ",
+          "points": 15,
+          "category": "指定ホイール"
+        },
+        {
+          "id": "target_model_year",
+          "label": "DBA-ND5RC/DBA-",
           "points": 15,
           "category": "ターゲット型式・年式"
         }
@@ -119,7 +145,8 @@
       "detected_at": "2026-11-17T07:15:00+09:00",
       "notified_line": true,
       "skip_reason": null,
-      "ignored": false
+      "ignored": false,
+      "title_signature": "個人出品売り切り平成27年マツダロードスターNRADBAND5RC6MT"
     },
     {
       "id": "jmty_tokyo_car_992817",
@@ -146,7 +173,8 @@
       "rank": "B",
       "badges": [
         {
-          "label": "DBA-ND5RC (2017/H29)",
+          "id": "target_model_year",
+          "label": "DBA-ND5RC/DBA-",
           "points": 15,
           "category": "ターゲット型式・年式"
         }
@@ -154,9 +182,8 @@
       "detected_at": "2026-11-17T06:00:00+09:00",
       "notified_line": false,
       "skip_reason": "150万円以上かつ競技系加点キーワード（NR-A/LSD/ロールバー/TE37/レース仕様）なしのためLINE通知を温存スキップ",
-      "ignored": false
+      "ignored": false,
+      "title_signature": "マツダNDロードスターSスペシャルパッケージ6MT2017年式H29DB"
     }
-  ],
-  "ignored_ids": [],
-  "ignored_signatures": []
+  ]
 }
