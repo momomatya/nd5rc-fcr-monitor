@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 NDロードスター（FCRカップ戦仕様）マッチ度計算・除外判定・興味なし（通知ブロック）判定モジュール
+（「平成27年」「平成28年」「平成29年」「1.5」「手動ソフトトップ」表記にも対応）
 """
 
 import re
@@ -15,6 +16,24 @@ COMPETITION_RULE_IDS = {
     "safety_rollbar",
     "wheel_te37",
 }
+
+# config.json 側の target_model_year に「平成27年」等が入っていなくても自動で補完する同義語リスト
+TARGET_MODEL_YEAR_SYNONYMS = [
+    "DBA-ND5RC",
+    "ND5RC",
+    "2015年",
+    "2016年",
+    "2017年",
+    "H27",
+    "H28",
+    "H29",
+    "平成27年",
+    "平成28年",
+    "平成29年",
+    "1.5",
+    "S1.5",
+    "Ｓ1.5",
+]
 
 
 def normalize_title_signature(title: str) -> str:
@@ -33,12 +52,6 @@ def is_ignored_vehicle(
     ignored_ids: Optional[set] = None,
     ignored_signatures: Optional[set] = None,
 ) -> Tuple[bool, str]:
-    """
-    ユーザーが「興味なし（通知ミュート）」フラグを設定した車両かどうかを判定する。
-    - 車両IDの完全一致
-    - タイトル正規化シグネチャの一致（再出品・価格改定時の再通知もブロック）
-    - 興味なし出品者・固有フレーズ（ignored_seller_keywords）の一致
-    """
     if item.get("ignored") is True:
         return True, "興味なしフラグ設定済み車両"
 
@@ -66,9 +79,6 @@ def is_ignored_vehicle(
 
 
 def extract_price_man(text: str, raw_price_yen: Optional[int] = None) -> Tuple[Optional[float], str]:
-    """
-    テキストまたは数値（円）から「万円」単位の価格と表示用文字列を抽出する。
-    """
     if raw_price_yen is not None and raw_price_yen > 0:
         man = round(raw_price_yen / 10000.0, 1)
         display = f"{int(man) if man.is_integer() else man}万円"
@@ -97,15 +107,12 @@ def extract_price_man(text: str, raw_price_yen: Optional[int] = None) -> Tuple[O
 
 
 def extract_vehicle_specs(text: str, existing_specs: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    """
-    タイトル・本文からお気に入り比較画面用の主要スペック項目を自動抽出する。
-    """
     if existing_specs:
         return existing_specs
 
     upper = text.upper()
     year_str = "不明（要確認）"
-    m_year = re.search(r"(201[5-9]|202[0-5])年|H(2[7-9]|30|31)年?", text)
+    m_year = re.search(r"(201[5-9]|202[0-6])年|平成(2[7-9]|3[01])年|H(2[7-9]|30|31)年?|令和\s*([1-8])年", text)
     if m_year:
         year_str = m_year.group(0)
 
@@ -115,9 +122,9 @@ def extract_vehicle_specs(text: str, existing_specs: Optional[Dict[str, str]] = 
     elif "RS" in upper:
         grade_str = "RS (6MT)"
     elif "Sスペシャル" in text or "S SPECIAL" in upper:
-        grade_str = "S Special Package (6MT)"
-    elif "Sレザー" in text:
-        grade_str = "S Leather Package (6MT)"
+        grade_str = "S Special Package"
+    elif "レザーパッケージ" in text or "Sレザー" in text or "LEATHER" in upper:
+        grade_str = "S Leather Package"
 
     mileage_str = "記載なし"
     m_km = re.search(r"(\d{1,2}(?:\.\d)?)\s*万\s*(?:km|キロ)|(\d{1,3},\d{3})\s*(?:km|キロ)", text, re.IGNORECASE)
@@ -161,9 +168,6 @@ def is_excluded_item(
     source: str,
     config: Dict[str, Any],
 ) -> Tuple[bool, str]:
-    """
-    共通必須フィルタに基づく除外判定を行う。
-    """
     full_text = f"{title} {description}"
     full_text_upper = full_text.upper()
 
@@ -206,10 +210,6 @@ def score_vehicle(
     ignored_ids: Optional[set] = None,
     ignored_signatures: Optional[set] = None,
 ) -> Dict[str, Any]:
-    """
-    車両情報を解析してマッチ度スコア（最大100pt）、ランク（S/A/B/C）、
-    獲得バッジ配列、スペック要約、興味なしフラグ判定、およびLINE通知可否を算出する。
-    """
     title = item.get("title", "")
     description = item.get("description", "")
     full_text = f"{title} {description}"
@@ -231,7 +231,12 @@ def score_vehicle(
         rule_id = rule.get("id", "")
         category = rule.get("category", "")
         points = int(rule.get("points", 0))
-        keywords = rule.get("keywords", [])
+        keywords = list(rule.get("keywords", []))
+        if rule_id == "target_model_year":
+            for syn in TARGET_MODEL_YEAR_SYNONYMS:
+                if syn not in keywords:
+                    keywords.append(syn)
+
         neg_keywords = rule.get("negative_keywords", [])
 
         if neg_keywords and any(nk.upper() in full_text_upper for nk in neg_keywords):
@@ -282,7 +287,6 @@ def score_vehicle(
     else:
         rank = "C"
 
-    # 興味なし（通知ブロック）判定
     ignored_flag, ignore_reason = is_ignored_vehicle(
         item, config, ignored_ids=ignored_ids, ignored_signatures=ignored_signatures
     )
