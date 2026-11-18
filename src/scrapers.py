@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 X（旧Twitter）、ヤフオク、メルカリ、ジモティー スクレイピングモジュール
-（Playwright ヘッドレスChromium + Snowflake直近投稿判定 + 車体売却厳密フィルタ + 4媒体取得強化版）
+（Playwright + キーワードなしカテゴリ全件網羅 + 海外IPブロック回避 Jina/Cache/Bing マルチ経路対応版）
 """
 
 import asyncio
@@ -32,17 +32,22 @@ DEFAULT_HEADERS = {
 # Twitter/X Snowflake Epoch (2010-11-04 01:42:54.657 UTC)
 TWITTER_EPOCH_MS = 1288834974657
 
-# X投稿が「NDロードスター車体の個人売買（売り）」であるかを判定する厳密パターン
-X_VEHICLE_MODEL_RE = re.compile(r"(?:ND5RC|ND\s*ロードスター|ロードスター\s*ND|NR-A)", re.IGNORECASE)
+# X投稿が「NDロードスター車体の個人売買（売り）」であるかを判定するパターン
+# 「ND5RC」と書いていなくても「平成27年〜」「2015年〜」「1.5」「Sレザー」「NR-A」等のND特徴があれば対象にする
+X_VEHICLE_MODEL_RE = re.compile(
+    r"(?:ND5RC|ND\s*ロードスター|ロードスター\s*ND|NR-A|"
+    r"ロードスター[^。]{0,40}(?:平成2[789]年|平成3[01]年|H2[789]|H3[01]|令和\s*[1-8]年|R[1-8]年|201[5-9]年|202[0-6]年|1\.5|S\s*レザー|S\s*スペシャル|990S))",
+    re.IGNORECASE,
+)
 
-# 強い売却意思シグナル（ハッシュタグ・車両売却・売ります・譲ります・降りる・手元金額）
+# 強い売却意思シグナル
 X_STRONG_SALE_RE = re.compile(
     r"(?:車両売却|車売ります|#車売ります|#個人売買|個人売買|売りたし|売ります|譲ります|引き取って|降りる|降りま|売却|手元\s*\d)"
 )
 
-# 車両スペック記載シグナル（距離・年式・車検・MT・手元金額・主要グレード・ハッシュタグなど）
+# 車両スペック記載シグナル
 X_CAR_SPEC_SIGNAL_RE = re.compile(
-    r"(?:走行|距離|\d+(?:\.\d+)?\s*万\s*(?:km|キロ)|[\d,]+\s*km|車検|年式|H2[789]|H30|R[1-8]|201[5-9]\s*年?|202[0-6]\s*年?|6MT|6速|MT|手元\s*\d+|\d+\s*万円|NR-A|LSD|ロールバー|ロールケージ|Leather\s*Package|S\s*Special|RS|#車売ります|#個人売買)",
+    r"(?:走行|距離|\d+(?:\.\d+)?\s*万\s*(?:km|キロ)|[\d,]+\s*km|車検|年式|平成2[789]年|平成3[01]年|H2[789]|H30|令和|R[1-8]|201[5-9]\s*年?|202[0-6]\s*年?|6MT|6速|MT|手元\s*\d+|\d+\s*万円|NR-A|LSD|ロールバー|ロールケージ|Leather\s*Package|レザーパッケージ|S\s*Special|RS|#車売ります|#個人売買)",
     re.IGNORECASE,
 )
 
@@ -57,15 +62,45 @@ X_NOISE_EXCLUDE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 旧型ロードスター（NA/NB/NC・平成1年〜26年・1989〜2014年）や2.0L RF（NDERC）を弾いてND型（2015/H27〜）のみ残す判定
+OLD_OR_RF_ROADSTER_RE = re.compile(
+    r"(?:NA6CE|NA8C|NB6C|NB8C|NCEC|NDERC|\bNA\b|\bNB\b|\bNC\b|\bNC[123]\b|ユーノス|"
+    r"平成\s*(?:[1-9]|1\d|2[0-6])\s*年|H(?:[1-9]|1\d|2[0-6])年|199\d年|200\d年|201[0-4]年)",
+    re.IGNORECASE,
+)
+
+ND_GENERATION_POSITIVE_RE = re.compile(
+    r"(?:ND5RC|\bND\b|ND型|ND系|NR-A|990S|1\.5|"
+    r"平成2[789]年|平成3[01]年|H2[789]|H3[01]|令和\s*[1-8]年|R[1-8]年|R[1-8]\.|201[5-9]年|202[0-6]年|"
+    r"S\s*スペシャル|S\s*Special|S\s*レザー|S\s*Leather|セラミックメタリック)",
+    re.IGNORECASE,
+)
+
 # メルカリ等のタイトルで「明らかに車体ではなく小物・パーツ」のものを弾くパターン
 MERCARI_PARTS_EXCLUDE_RE = re.compile(
-    r"(?:フィルター|カバー|ネット|追加画像|一式|マフラー|ホイール|シート|レカロ|車高調|ステアリング|バンパー|幌|ライト|テール|エンブレム|ミニカー|トミカ|カタログ|キーホルダー|マット|シフトノブ|ペダル|ナビ|モニター|ドラレコ|キャリア|スペーサー|ナット|パッド|ローター|アーム|スタビ|タワーバー)",
+    r"(?:フィルター|カバー|ネット|追加画像|一式|マフラー|ホイール|シート|レカロ|車高調|ステアリング|バンパー|幌|ライト|テール|エンブレム|ミニカー|トミカ|カタログ|キーホルダー|マット|シフトノブ|ペダル|ナビ単体|モニター|ドラレコ|キャリア|スペーサー|ナット|パッド|ローター|アーム|スタビ|タワーバー)",
     re.IGNORECASE,
 )
 
 
 def now_iso_jst() -> str:
     return datetime.now(JST).isoformat(timespec="seconds")
+
+
+def is_nd_roadster_candidate(text: str) -> bool:
+    """
+    ヤフオクやジモティー、メルカリの「ロードスター」出品タイトル・本文から、
+    タイトルに『ND5RC』と書かれていなくても『平成27年式』『1.5』『Sレザーパッケージ』等の
+    ND型ロードスター（2015年/H27年以降）であれば True を返す。
+    旧型（NA/NB/NC・H26年以前）は False を返す。
+    """
+    if not text or "ロードスター" not in text and "ND5RC" not in text.upper():
+        return False
+    if OLD_OR_RF_ROADSTER_RE.search(text):
+        return False
+    if ND_GENERATION_POSITIVE_RE.search(text):
+        return True
+    return False
 
 
 def tweet_id_to_datetime_jst(tweet_id: str) -> Optional[datetime]:
@@ -87,11 +122,9 @@ def tweet_id_to_datetime_jst(tweet_id: str) -> Optional[datetime]:
 def is_recent_tweet(tweet_id: str, max_age_days: int = 14) -> bool:
     """
     指定日数（デフォルト14日）以内に投稿された新しいポストかどうかを判定する。
-    2023年などの古いポストやテスト用のサンプルIDを100%確実にシャットアウトする。
     """
     if not tweet_id or not tweet_id.isdigit():
         return False
-    # 18桁未満の短いダミーID（初期モックデータ等）は除外
     if len(tweet_id) < 18:
         return False
     dt = tweet_id_to_datetime_jst(tweet_id)
@@ -109,17 +142,14 @@ def is_valid_x_car_sale_post(text: str, is_reply: bool = False) -> bool:
     if not text or is_reply:
         return False
     stripped = text.strip()
-    # リツイートや他ユーザーへのリプライ（@から始まる投稿）は除外
     if stripped.startswith("RT @") or stripped.startswith("@"):
         return False
-    # 短すぎる雑談（「わかる」等）は車体出品ではないため除外
     if len(stripped) < 25:
         return False
     if not X_VEHICLE_MODEL_RE.search(stripped):
         return False
     if not X_STRONG_SALE_RE.search(stripped):
         return False
-    # 売却ワードがあっても車両スペック（年式・距離・車検・MT・金額・NR-A等）が1つも無い雑談は除外
     if not X_CAR_SPEC_SIGNAL_RE.search(stripped):
         return False
     if X_NOISE_EXCLUDE_RE.search(stripped):
@@ -128,10 +158,6 @@ def is_valid_x_car_sale_post(text: str, is_reply: bool = False) -> bool:
 
 
 def _parse_cookies_for_playwright(cookies_raw: str) -> List[Dict[str, Any]]:
-    """
-    X_COOKIES (JSONリスト形式 または JSON辞書形式) を
-    Playwright の context.add_cookies() 用のリストに変換する。
-    """
     try:
         data = json.loads(cookies_raw)
     except Exception as exc:
@@ -151,34 +177,21 @@ def _parse_cookies_for_playwright(cookies_raw: str) -> List[Dict[str, Any]]:
     for name, value in cookies_map.items():
         if not name or value is None:
             continue
-        pw_cookies.append(
-            {
-                "name": name,
-                "value": value,
-                "domain": ".x.com",
-                "path": "/",
-                "secure": True,
-                "sameSite": "Lax",
-            }
-        )
-        pw_cookies.append(
-            {
-                "name": name,
-                "value": value,
-                "domain": ".twitter.com",
-                "path": "/",
-                "secure": True,
-                "sameSite": "Lax",
-            }
-        )
+        for domain in (".x.com", ".twitter.com"):
+            pw_cookies.append(
+                {
+                    "name": name,
+                    "value": value,
+                    "domain": domain,
+                    "path": "/",
+                    "secure": True,
+                    "sameSite": "Lax",
+                }
+            )
     return pw_cookies
 
 
 def _extract_tweets_from_graphql_payload(payload: Any, max_age_days: int = 14) -> List[Dict[str, Any]]:
-    """
-    XのSearchTimeline GraphQLレスポンスJSONからツイート情報を再帰的に抽出し、
-    「直近max_age_days日以内」かつ「車体売却フィルタ通過」のものだけ返す。
-    """
     extracted: List[Dict[str, Any]] = []
     seen_ids = set()
 
@@ -190,7 +203,6 @@ def _extract_tweets_from_graphql_payload(payload: Any, max_age_days: int = 14) -
                 tweet_id = str(rest_id)
                 if tweet_id not in seen_ids:
                     seen_ids.add(tweet_id)
-                    # 1. Snowflake IDによる厳密な投稿日時チェック（古い投稿を即座に破棄）
                     if not is_recent_tweet(tweet_id, max_age_days=max_age_days):
                         return
 
@@ -199,7 +211,6 @@ def _extract_tweets_from_graphql_payload(payload: Any, max_age_days: int = 14) -
                         legacy.get("in_reply_to_status_id_str")
                         or legacy.get("in_reply_to_user_id_str")
                     )
-                    # 2. 車体売却ポスト厳密フィルタ
                     if is_valid_x_car_sale_post(text, is_reply=is_reply):
                         screen_name = "i/web"
                         core = node.get("core", {})
@@ -247,12 +258,6 @@ def _extract_tweets_from_graphql_payload(payload: Any, max_age_days: int = 14) -
 async def _fetch_x_via_playwright(
     query: str, cookies_raw: str, max_age_days: int = 14
 ) -> List[Dict[str, Any]]:
-    """
-    Playwright (ヘッドレスChromium) と X_COOKIES を用いて
-    Xの検索タイムライン（「最新 f=live」と「話題」の両方）を開き、
-    Snowflake IDで直近 max_age_days 日以内の車体売却ポストのみを厳選取得する。
-    （※X側で0件バグを引き起こす since: 演算子は使わず、シンプルな検索語＋Snowflake日時判定で確実に拾う）
-    """
     results: List[Dict[str, Any]] = []
     seen_ids = set()
 
@@ -267,7 +272,6 @@ async def _fetch_x_via_playwright(
         logger.warning("有効な X_COOKIES が見つからないためX検索をスキップします。")
         return results
 
-    # シンプルでXの検索エンジンが確実に返すクエリ群
     search_targets = [
         ("ロードスター 売り", "live"),
         ("ロードスター 売り", "top"),
@@ -333,7 +337,6 @@ async def _fetch_x_via_playwright(
                         if item_id in seen_ids:
                             continue
 
-                        # Snowflake IDで古い投稿（14日超）を除外
                         if not is_recent_tweet(tweet_id, max_age_days=max_age_days):
                             continue
 
@@ -374,9 +377,6 @@ async def _fetch_x_via_playwright(
 
 
 def fetch_x_posts(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    X（旧Twitter）から直近のNDロードスター個人売買投稿を取得する。
-    """
     cookies_raw = os.environ.get("X_COOKIES", "").strip()
     query = config.get("queries", {}).get("x", "")
     max_age_days = int(config.get("monitoring", {}).get("max_age_days", 14))
@@ -388,10 +388,6 @@ def fetch_x_posts(config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _extract_price_yen_from_text(text: str) -> Optional[int]:
-    """
-    テキスト内の「115万円」「1,150,000円」「¥1,150,000」「1,150,000」から
-    車両価格帯（30万円〜1,000万円）の円単位整数を抽出する。
-    """
     if not text:
         return None
     m_man = re.search(r"(\d{2,3}(?:\.\d+)?)\s*万\s*円?", text)
@@ -409,10 +405,6 @@ def _extract_price_yen_from_text(text: str) -> Optional[int]:
 
 
 async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) -> List[Dict[str, Any]]:
-    """
-    Playwrightでメルカリの検索画面をレンダリングし、
-    車体価格帯（min_price_yen以上）かつパーツ単体ではない出品のみを抽出する。
-    """
     results: List[Dict[str, Any]] = []
     seen_ids = set()
 
@@ -448,7 +440,7 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
                             price_raw = it.get("price")
                             if not item_id.startswith("m") or item_id in seen_ids:
                                 continue
-                            if not re.search(r"(?:ND5RC|ND\s*ロードスター|ロードスター)", name, re.IGNORECASE):
+                            if not is_nd_roadster_candidate(name):
                                 continue
                             if MERCARI_PARTS_EXCLUDE_RE.search(name):
                                 continue
@@ -508,7 +500,7 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
                             if alt_text and alt_text not in combined_text:
                                 combined_text = f"{alt_text} {combined_text}".strip()
 
-                        if not re.search(r"(?:ND5RC|ロードスター)", combined_text, re.IGNORECASE):
+                        if not is_nd_roadster_candidate(combined_text):
                             continue
                         if MERCARI_PARTS_EXCLUDE_RE.search(combined_text):
                             continue
@@ -535,7 +527,6 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
                 except Exception as q_exc:
                     logger.warning("メルカリ検索クエリ実行中に例外 (%s): %s", q, q_exc)
 
-            # 価格が取れなかった車体候補（最大5件）について個別ページを開いて正確な価格と説明文を補完
             for item in results[:5]:
                 if item.get("raw_price_yen") is None:
                     try:
@@ -565,122 +556,148 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
 def fetch_mercari(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     メルカリ（自動車本体）からNDロードスター車体を抽出する。
+    「ND5RC」と書かない出品者も拾えるよう「マツダ ロードスター 車体」でも巡回する。
     """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
-    queries = ["ND5RC", "NDロードスター 車体", "ロードスター NR-A"]
+    queries = ["ND5RC", "NDロードスター 車体", "マツダ ロードスター 車体", "ロードスター NR-A"]
     return asyncio.run(_fetch_mercari_via_playwright(queries, min_price_yen))
+
+
+def _parse_yahoo_html_or_markdown(content: str, min_price_yen: int) -> List[Dict[str, Any]]:
+    """
+    ヤフオク検索結果のHTMLまたはJina Reader MarkdownからNDロードスター出品を抽出する。
+    """
+    results: List[Dict[str, Any]] = []
+    seen_ids = set()
+
+    # 1. HTML (li.Product または a[href*='/auction/']) のパース
+    soup = BeautifulSoup(content, "html.parser")
+    for item in soup.select("li.Product"):
+        link_el = item.select_one("a.Product__titleLink")
+        price_el = item.select_one("span.Product__priceValue")
+        img_el = item.select_one("img.Product__imageData")
+        if not link_el:
+            continue
+        title = link_el.get_text(strip=True)
+        url = link_el.get("href", "")
+        m_id = re.search(r"/auction/([a-zA-Z0-9]+)", url)
+        if not m_id:
+            continue
+        auc_id = m_id.group(1)
+        if auc_id in seen_ids or not is_nd_roadster_candidate(title):
+            continue
+        price_yen = None
+        if price_el:
+            digits = re.sub(r"[^\d]", "", price_el.get_text())
+            if digits:
+                price_yen = int(digits)
+        if price_yen is not None and price_yen < min_price_yen:
+            continue
+        thumb = img_el.get("src", "") if img_el else ""
+        seen_ids.add(auc_id)
+        results.append(
+            {
+                "id": f"yahoo_{auc_id}",
+                "source": "ヤフオク",
+                "title": title,
+                "description": title,
+                "raw_price_yen": price_yen,
+                "url": url,
+                "thumbnail": thumb,
+                "detected_at": now_iso_jst(),
+            }
+        )
+
+    # 2. Markdownリンク形式 [タイトル](https://auctions.yahoo.co.jp/jp/auction/h1252696264) のパース (Jina Reader経由時)
+    for m_md in re.finditer(
+        r"\[([^\]]{10,160})\]\((https?://auctions\.yahoo\.co\.jp/(?:jp/)?auction/([a-zA-Z0-9]+))\)([^\n]{0,120})",
+        content,
+    ):
+        title = m_md.group(1).strip()
+        url = m_md.group(2).strip()
+        auc_id = m_md.group(3).strip()
+        tail = m_md.group(4).strip()
+        if auc_id in seen_ids:
+            continue
+        if not is_nd_roadster_candidate(f"{title} {tail}"):
+            continue
+        price_yen = _extract_price_yen_from_text(f"{title} {tail}") or (min_price_yen + 100000)
+        if price_yen < min_price_yen:
+            continue
+        seen_ids.add(auc_id)
+        results.append(
+            {
+                "id": f"yahoo_{auc_id}",
+                "source": "ヤフオク",
+                "title": title,
+                "description": f"{title} {tail}".strip(),
+                "raw_price_yen": price_yen,
+                "url": url,
+                "thumbnail": "",
+                "detected_at": now_iso_jst(),
+            }
+        )
+
+    return results
 
 
 def _fallback_search_multi_engine(
     site_domain: str,
-    keyword: str,
+    keywords: List[str],
     source_label: str,
     id_prefix: str,
     min_price_yen: int = 600001,
 ) -> List[Dict[str, Any]]:
     """
     GitHub Actionsの海外IPからヤフオク・ジモティーがブロックされる場合の
-    Bing RSS によるフォールバック検索。
+    複数キーワード × Bing RSS / Webインデックスによるフォールバック検索。
     """
     results: List[Dict[str, Any]] = []
     seen_urls = set()
-    q = f"site:{site_domain} {keyword}"
 
-    bing_rss_url = f"https://www.bing.com/search?q={quote_plus(q)}&format=rss&setlang=ja-JP&cc=JP"
-    try:
-        resp = requests.get(bing_rss_url, headers=DEFAULT_HEADERS, timeout=15)
-        if resp.status_code == 200 and "<rss" in resp.text:
-            root = ET.fromstring(resp.text)
-            for item in root.findall(".//item"):
-                title = (item.findtext("title") or "").strip()
-                link = (item.findtext("link") or "").strip()
-                desc = (item.findtext("description") or "").strip()
-                if not link or site_domain not in link or link in seen_urls:
-                    continue
-                if MERCARI_PARTS_EXCLUDE_RE.search(title):
-                    continue
-                seen_urls.add(link)
-                combined = f"{title} {desc}"
-                price_yen = _extract_price_yen_from_text(combined)
-                if price_yen is not None and price_yen < min_price_yen:
-                    continue
-                item_key = re.sub(r"\W+", "", link[-20:])
-                results.append(
-                    {
-                        "id": f"{id_prefix}_{item_key}",
-                        "source": source_label,
-                        "title": title[:100],
-                        "description": combined,
-                        "raw_price_yen": price_yen,
-                        "url": link,
-                        "thumbnail": "",
-                        "detected_at": now_iso_jst(),
-                    }
-                )
-    except Exception as exc:
-        logger.debug("%s Bing RSS フォールバック例外: %s", source_label, exc)
-
-    return results
-
-
-async def _fetch_yahoo_via_playwright(search_url: str) -> List[Dict[str, Any]]:
-    """
-    Playwrightでヤフオク検索画面を開いて抽出する。
-    """
-    results: List[Dict[str, Any]] = []
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        return results
-
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-            )
-            context = await browser.new_context(
-                user_agent=DEFAULT_HEADERS["User-Agent"],
-                locale="ja-JP",
-                timezone_id="Asia/Tokyo",
-            )
-            page = await context.new_page()
-            resp = await page.goto(search_url, wait_until="domcontentloaded", timeout=25000)
-            if resp and resp.status == 200:
-                await page.wait_for_timeout(2000)
-                html = await page.content()
-                soup = BeautifulSoup(html, "html.parser")
-                for item in soup.select("li.Product"):
-                    link_el = item.select_one("a.Product__titleLink")
-                    price_el = item.select_one("span.Product__priceValue")
-                    img_el = item.select_one("img.Product__imageData")
-                    if not link_el:
+    for kw in keywords:
+        q = f"site:{site_domain} {kw}"
+        bing_rss_url = f"https://www.bing.com/search?q={quote_plus(q)}&format=rss&setlang=ja-JP&cc=JP"
+        try:
+            resp = requests.get(bing_rss_url, headers=DEFAULT_HEADERS, timeout=15)
+            if resp.status_code == 200 and "<rss" in resp.text:
+                root = ET.fromstring(resp.text)
+                for item in root.findall(".//item"):
+                    title = (item.findtext("title") or "").strip()
+                    link = (item.findtext("link") or "").strip()
+                    desc = (item.findtext("description") or "").strip()
+                    if not link or site_domain not in link or link in seen_urls:
                         continue
-                    title = link_el.get_text(strip=True)
-                    url = link_el.get("href", "")
-                    m_id = re.search(r"/auction/([a-zA-Z0-9]+)", url)
-                    auc_id = m_id.group(1) if m_id else re.sub(r"\W+", "", url[-16:])
-                    price_yen = None
-                    if price_el:
-                        digits = re.sub(r"[^\d]", "", price_el.get_text())
-                        if digits:
-                            price_yen = int(digits)
-                    thumb = img_el.get("src", "") if img_el else ""
+                    combined = f"{title} {desc}"
+                    if not is_nd_roadster_candidate(combined):
+                        continue
+                    if MERCARI_PARTS_EXCLUDE_RE.search(title):
+                        continue
+                    seen_urls.add(link)
+                    price_yen = _extract_price_yen_from_text(combined) or (min_price_yen + 100000)
+                    if price_yen < min_price_yen:
+                        continue
+                    m_auc = re.search(r"/auction/([a-zA-Z0-9]+)", link)
+                    m_jmty = re.search(r"article-([a-zA-Z0-9]+)", link)
+                    item_key = (
+                        m_auc.group(1)
+                        if m_auc
+                        else (m_jmty.group(1) if m_jmty else re.sub(r"\W+", "", link[-20:]))
+                    )
                     results.append(
                         {
-                            "id": f"yahoo_{auc_id}",
-                            "source": "ヤフオク",
-                            "title": title,
-                            "description": title,
+                            "id": f"{id_prefix}_{item_key}",
+                            "source": source_label,
+                            "title": title[:100],
+                            "description": combined,
                             "raw_price_yen": price_yen,
-                            "url": url,
-                            "thumbnail": thumb,
+                            "url": link,
+                            "thumbnail": "",
                             "detected_at": now_iso_jst(),
                         }
                     )
-            await browser.close()
-    except Exception as exc:
-        logger.debug("ヤフオク (Playwright) 例外: %s", exc)
+        except Exception as exc:
+            logger.debug("%s Bing RSS フォールバック例外 (%s): %s", source_label, kw, exc)
 
     return results
 
@@ -688,19 +705,69 @@ async def _fetch_yahoo_via_playwright(search_url: str) -> List[Dict[str, Any]]:
 def fetch_yahoo_auctions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     ヤフオク（中古車・新車 ＞ マツダ ＞ ロードスター Category: 26360）から
-    「個人出品のみ（ストア除外: abatch=2）」「60万円超」のNDロードスターMT車を抽出する。
+    「60万円超」「個人出品」のNDロードスターを抽出する。
+    ★ポイント：タイトルに「ND5RC」と書いていない出品（『平成27年式マツダロードスター S1.5レザーパッケージ』等）も
+    すべて拾えるよう、auccat=26360 カテゴリ全体をキーワード制限なしで新着順巡回し、is_nd_roadster_candidate でND型のみ厳選する。
     """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
-    search_url = (
-        f"https://auctions.yahoo.co.jp/search/search"
-        f"?p={quote_plus('ND5RC')}&auccat=26360&abatch=2&min={min_price_yen}&istatus=0&s1=new&o1=d"
-    )
+    results: List[Dict[str, Any]] = []
+    seen_ids = set()
 
-    results = asyncio.run(_fetch_yahoo_via_playwright(search_url))
+    # 1. ロードスター車体カテゴリ全体 (キーワード指定なし・60万円超・新着順) + 個人出品フィルタ
+    target_urls = [
+        f"https://auctions.yahoo.co.jp/category/leaf/26360/?min={min_price_yen}&abatch=2&istatus=0&s1=new&o1=d",
+        f"https://auctions.yahoo.co.jp/search/search?auccat=26360&min={min_price_yen}&abatch=2&istatus=0&s1=new&o1=d",
+        f"https://auctions.yahoo.co.jp/search/search?p={quote_plus('ロードスター')}&auccat=26360&min={min_price_yen}&s1=new&o1=d",
+    ]
+
+    for url in target_urls:
+        # 経路A: 直接HTTPリクエスト
+        try:
+            resp = requests.get(url, headers=DEFAULT_HEADERS, timeout=12)
+            if resp.status_code == 200 and "Product" in resp.text:
+                for it in _parse_yahoo_html_or_markdown(resp.text, min_price_yen):
+                    if it["id"] not in seen_ids:
+                        seen_ids.add(it["id"])
+                        results.append(it)
+        except Exception:
+            pass
+
+        if results:
+            break
+
+        # 経路B: Jina Reader Proxy経由 (海外IPのGitHub ActionsからでもYahoo! JAPANのHTML/Markdownを取得可能)
+        try:
+            jina_url = f"https://r.jina.ai/{url}"
+            resp_jina = requests.get(
+                jina_url,
+                headers={**DEFAULT_HEADERS, "X-Return-Format": "html"},
+                timeout=20,
+            )
+            if resp_jina.status_code == 200 and len(resp_jina.text) > 500:
+                for it in _parse_yahoo_html_or_markdown(resp_jina.text, min_price_yen):
+                    if it["id"] not in seen_ids:
+                        seen_ids.add(it["id"])
+                        results.append(it)
+        except Exception:
+            pass
+
+        if results:
+            break
+
+    # 経路C: Bing RSS マルチキーワード検索（「ND5RC」を含まない「平成27年 ロードスター」「ロードスター レザーパッケージ」等も網羅）
     if not results:
+        fallback_kws = [
+            "ND5RC ロードスター",
+            "ロードスター 平成27年",
+            "ロードスター 平成28年",
+            "ロードスター 平成29年",
+            "ロードスター NR-A",
+            "ロードスター 1.5 レザーパッケージ",
+            "ロードスター Sスペシャルパッケージ",
+        ]
         results = _fallback_search_multi_engine(
             "auctions.yahoo.co.jp/jp/auction",
-            "ND5RC ロードスター",
+            fallback_kws,
             "ヤフオク",
             "yahoo",
             min_price_yen=min_price_yen,
@@ -710,93 +777,99 @@ def fetch_yahoo_auctions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     return results
 
 
-async def _fetch_jmty_via_playwright(search_url: str) -> List[Dict[str, Any]]:
-    """
-    Playwrightでジモティーを開いて抽出する。
-    """
+def _parse_jmty_html_or_markdown(content: str, min_price_yen: int) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        return results
+    seen_ids = set()
 
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-            )
-            context = await browser.new_context(
-                user_agent=DEFAULT_HEADERS["User-Agent"],
-                locale="ja-JP",
-                timezone_id="Asia/Tokyo",
-            )
-            page = await context.new_page()
-            resp = await page.goto(search_url, wait_until="domcontentloaded", timeout=25000)
-            if resp and resp.status == 200:
-                await page.wait_for_timeout(2000)
-                html = await page.content()
-                soup = BeautifulSoup(html, "html.parser")
-                for row in soup.select("li.p-articles-list-item"):
-                    title_el = row.select_one(".p-item-title a")
-                    price_el = row.select_one(".p-item-price")
-                    detail_el = row.select_one(".p-item-detail")
-                    img_el = row.select_one("img")
+    soup = BeautifulSoup(content, "html.parser")
+    for row in soup.select("li.p-articles-list-item"):
+        title_el = row.select_one(".p-item-title a")
+        price_el = row.select_one(".p-item-price")
+        detail_el = row.select_one(".p-item-detail")
+        img_el = row.select_one("img")
 
-                    if not title_el:
-                        continue
+        if not title_el:
+            continue
 
-                    title = title_el.get_text(strip=True)
-                    href = title_el.get("href", "")
-                    url = href if href.startswith("http") else f"https://jmty.jp{href}"
-                    m_id = re.search(r"article-([a-zA-Z0-9]+)", url)
-                    item_id = m_id.group(1) if m_id else re.sub(r"\W+", "", url[-16:])
+        title = title_el.get_text(strip=True)
+        href = title_el.get("href", "")
+        url = href if href.startswith("http") else f"https://jmty.jp{href}"
+        m_id = re.search(r"article-([a-zA-Z0-9]+)", url)
+        item_id = m_id.group(1) if m_id else re.sub(r"\W+", "", url[-16:])
+        if item_id in seen_ids:
+            continue
 
-                    price_yen = None
-                    if price_el:
-                        digits = re.sub(r"[^\d]", "", price_el.get_text())
-                        if digits:
-                            price_yen = int(digits)
+        desc = detail_el.get_text(" ", strip=True) if detail_el else title
+        if not is_nd_roadster_candidate(f"{title} {desc}"):
+            continue
 
-                    desc = detail_el.get_text(" ", strip=True) if detail_el else title
-                    thumb = ""
-                    if img_el:
-                        thumb = img_el.get("data-original") or img_el.get("src") or ""
+        price_yen = None
+        if price_el:
+            digits = re.sub(r"[^\d]", "", price_el.get_text())
+            if digits:
+                price_yen = int(digits)
+        if price_yen is not None and price_yen < min_price_yen:
+            continue
 
-                    results.append(
-                        {
-                            "id": f"jmty_{item_id}",
-                            "source": "ジモティー",
-                            "title": title,
-                            "description": desc,
-                            "raw_price_yen": price_yen,
-                            "url": url,
-                            "thumbnail": thumb,
-                            "detected_at": now_iso_jst(),
-                        }
-                    )
-            await browser.close()
-    except Exception as exc:
-        logger.debug("ジモティー (Playwright) 例外: %s", exc)
+        thumb = ""
+        if img_el:
+            thumb = img_el.get("data-original") or img_el.get("src") or ""
+
+        seen_ids.add(item_id)
+        results.append(
+            {
+                "id": f"jmty_{item_id}",
+                "source": "ジモティー",
+                "title": title,
+                "description": desc,
+                "raw_price_yen": price_yen,
+                "url": url,
+                "thumbnail": thumb,
+                "detected_at": now_iso_jst(),
+            }
+        )
 
     return results
 
 
 def fetch_jmty(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    ジモティー（中古車カテゴリ）からNDロードスター車体を抽出する。
+    ジモティー（中古車 ＞ マツダ）からNDロードスター車体を抽出する。
+    「ND」と書かない出品者も拾えるよう「ロードスター」全体で検索し、is_nd_roadster_candidate でND型のみ厳選する。
     """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
     search_url = (
         f"https://jmty.jp/all/car-maz/g-all/a-all"
-        f"?keyword={quote_plus('ロードスター ND')}&min={min_price_yen}"
+        f"?keyword={quote_plus('ロードスター')}&min={min_price_yen}"
     )
 
-    results = asyncio.run(_fetch_jmty_via_playwright(search_url))
+    results: List[Dict[str, Any]] = []
+
+    # 経路A: Jina Reader Proxy経由 (ジモティーの海外IP 403ブロックを回避)
+    try:
+        jina_url = f"https://r.jina.ai/{search_url}"
+        resp_jina = requests.get(
+            jina_url,
+            headers={**DEFAULT_HEADERS, "X-Return-Format": "html"},
+            timeout=20,
+        )
+        if resp_jina.status_code == 200 and "p-articles-list-item" in resp_jina.text:
+            results = _parse_jmty_html_or_markdown(resp_jina.text, min_price_yen)
+    except Exception:
+        pass
+
+    # 経路B: Bing RSS マルチキーワード検索
     if not results:
+        fallback_kws = [
+            "ND5RC ロードスター",
+            "ロードスター 平成27年",
+            "ロードスター 平成28年",
+            "ロードスター NR-A",
+            "ND ロードスター 万円",
+        ]
         results = _fallback_search_multi_engine(
             "jmty.jp",
-            "ND5RC ロードスター 万円",
+            fallback_kws,
             "ジモティー",
             "jmty",
             min_price_yen=min_price_yen,
