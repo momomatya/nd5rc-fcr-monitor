@@ -1,8 +1,8 @@
 {
-  "last_updated": "2026-11-19T21:14:14+09:00",
+  "last_updated": "2026-11-19T22:41:12+09:00",
   "seen_ids": [
-    "x_2121961318504906805",
-    "mercari_m71181867718"
+    "mercari_m71181867718",
+    "x_2121961318504906805"
   ],
   "ignored_ids": [
     "jmty_tokyo_car_992817",
@@ -221,55 +221,6 @@
       "notified_line": false,
       "excluded": false,
       "matched_rule_ids": []
-    },
-    {
-      "id": "x_2118330919140622443",
-      "source": "X",
-      "title": "【X個人売買】NCEC ロードスター売ります",
-      "description": "NCEC ロードスター売ります\n中期NR-Aの5速MTです\n詳しい写真は後日載せます\n仕様は吸排気、NOPRO書き換えECU\nCUSCORX-8用車高調、ブレーキパッド、スリット入りディスクローター、MAZDASPEEDパフォーマンスバーセットストラットタワー、フロア、リアセット\nハードトップ、幌撤去 https://t.co/AID1XVaIsh",
-      "raw_price_yen": null,
-      "url": "https://x.com/NA8C_841/status/2118330919140622443",
-      "thumbnail": "https://pbs.twimg.com/media/HWXSt6LakAAT0Rh.jpg",
-      "detected_at": "2026-11-05T22:13:42+09:00",
-      "price_man": null,
-      "price_display": "価格記載なし",
-      "favorite": false,
-      "ignored": true,
-      "title_signature": "X個人売買NCECロードスター売ります",
-      "specs": {
-        "year": "不明（要確認）",
-        "grade": "NR-A (6MT)",
-        "mileage": "記載なし",
-        "shaken": "本文参照",
-        "lsd": "社外・機械式 (CUSCO)",
-        "rollbar": "未装着 / 未記載",
-        "wheel": "純正 / その他",
-        "location": "出品ページ参照"
-      },
-      "score": 45,
-      "raw_score": 45,
-      "rank": "A",
-      "badges": [
-        {
-          "id": "grade_nra",
-          "label": "NR-A",
-          "points": 25,
-          "category": "最優先グレード"
-        },
-        {
-          "id": "drivetrain_lsd",
-          "label": "CUSCO",
-          "points": 20,
-          "category": "必須駆動系"
-        }
-      ],
-      "skip_reason": "🚫 興味なしフラグ設定中のためLINE通知をブロック（興味なしフラグ設定済み車両）",
-      "notified_line": false,
-      "excluded": false,
-      "matched_rule_ids": [
-        "grade_nra",
-        "drivetrain_lsd"
-      ]
     },
     {
       "id": "x_2119619595384598939",
