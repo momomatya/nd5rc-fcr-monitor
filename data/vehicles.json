@@ -1,8 +1,10 @@
 {
-  "last_updated": "2026-11-21T21:16:14+09:00",
+  "last_updated": "2026-11-21T22:25:32+09:00",
   "seen_ids": [
-    "x_2121961318504906805",
+    "x_2124111270496641402",
     "mercari_m66968985040",
+    "x_2121961318504906805",
+    "x_2124109857985064979",
     "mercari_m71181867718"
   ],
   "ignored_ids": [
@@ -121,6 +123,68 @@
     "個人売買H28年式ND5RCロードスターNRA6MT富士チャンピオンレー"
   ],
   "vehicles": [
+    {
+      "id": "x_2124109857985064979",
+      "source": "X",
+      "title": "【X個人売買】売ります",
+      "description": "売ります\n\nRECARO RSS シルバー\nNDロードスター運転席用レール付\n\n¥140,000\n\n使用期間:1年半\n\n熊本県内直接取引\n状態は悪くないと思います。破れ等はありません。 https://t.co/EzgEo79S7Y",
+      "raw_price_yen": null,
+      "url": "https://x.com/roadster_mx5_/status/2124109857985064979",
+      "thumbnail": "https://pbs.twimg.com/media/HXpap9lawAAgHd3.jpg",
+      "detected_at": "2026-11-21T20:57:08+09:00",
+      "price_man": null,
+      "price_display": "価格記載なし",
+      "favorite": false,
+      "ignored": false,
+      "title_signature": "X個人売買売ります",
+      "specs": {
+        "year": "不明（要確認）",
+        "grade": "RS (6MT)",
+        "mileage": "記載なし",
+        "shaken": "本文参照",
+        "lsd": "未記載 / 純正",
+        "rollbar": "未装着 / 未記載",
+        "wheel": "純正 / その他",
+        "location": "出品ページ参照"
+      },
+      "score": 0,
+      "raw_score": 0,
+      "rank": "C",
+      "badges": [],
+      "skip_reason": "Cランク（0〜14pt：ノーマル・要確認）のためダッシュボード記録のみ",
+      "notified_line": false
+    },
+    {
+      "id": "x_2124111270496641402",
+      "source": "X",
+      "title": "【X個人売買】売ります",
+      "description": "売ります\n\nTEIN MONO RACING NDロードスター用\nスプリング F16K,R12K\n\n¥100,000\n\n使用期間:半年\n走行距離:1万km\n\n熊本県内直接取引 https://t.co/jus9NqnWcR",
+      "raw_price_yen": null,
+      "url": "https://x.com/roadster_mx5_/status/2124111270496641402",
+      "thumbnail": "https://pbs.twimg.com/media/HXpb8MjasAAw-TR.jpg",
+      "detected_at": "2026-11-21T21:02:45+09:00",
+      "price_man": null,
+      "price_display": "価格記載なし",
+      "favorite": false,
+      "ignored": false,
+      "title_signature": "X個人売買売ります",
+      "specs": {
+        "year": "不明（要確認）",
+        "grade": "6MT（グレード要確認）",
+        "mileage": "1万km",
+        "shaken": "本文参照",
+        "lsd": "未記載 / 純正",
+        "rollbar": "未装着 / 未記載",
+        "wheel": "純正 / その他",
+        "location": "出品ページ参照"
+      },
+      "score": 0,
+      "raw_score": 0,
+      "rank": "C",
+      "badges": [],
+      "skip_reason": "Cランク（0〜14pt：ノーマル・要確認）のためダッシュボード記録のみ",
+      "notified_line": false
+    },
     {
       "id": "x_2121961318504906805",
       "source": "X",
