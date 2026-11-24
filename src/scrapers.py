@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 X（旧Twitter）、ヤフオク、メルカリ、ジモティー スクレイピングモジュール
-（Playwright + キーワードなしカテゴリ全件網羅 + 海外IPブロック回避 Jina/Cache/Bing マルチ経路対応版）
+（Playwright + 画像内スペック記載のX個人売買対応 + キーワードなしカテゴリ全件網羅 + 海外IPブロック回避版）
 """
 
 import asyncio
@@ -11,7 +11,7 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
-from urllib.parse import quote_plus, unquote
+from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
 
 import requests
@@ -33,7 +33,6 @@ DEFAULT_HEADERS = {
 TWITTER_EPOCH_MS = 1288834974657
 
 # X投稿が「NDロードスター車体の個人売買（売り）」であるかを判定するパターン
-# 「ND5RC」と書いていなくても「平成27年〜」「2015年〜」「1.5」「Sレザー」「NR-A」等のND特徴があれば対象にする
 X_VEHICLE_MODEL_RE = re.compile(
     r"(?:ND5RC|ND\s*ロードスター|ロードスター\s*ND|NR-A|"
     r"ロードスター[^。]{0,40}(?:平成2[789]年|平成3[01]年|H2[789]|H3[01]|令和\s*[1-8]年|R[1-8]年|201[5-9]年|202[0-6]年|1\.5|S\s*レザー|S\s*スペシャル|990S))",
@@ -42,7 +41,13 @@ X_VEHICLE_MODEL_RE = re.compile(
 
 # 強い売却意思シグナル
 X_STRONG_SALE_RE = re.compile(
-    r"(?:車両売却|車売ります|#車売ります|#個人売買|個人売買|売りたし|売ります|譲ります|引き取って|降りる|降りま|売却|手元\s*\d)"
+    r"(?:車両売却|車売ります|#車売ります|#売ります|#個人売買|個人売買|売りたし|売ります|譲ります|引き取って|降りる|降りま|売却|手元\s*\d|欲しい人いますか|買う人いますか)"
+)
+
+# 画像内にスペック・価格を書く個人売買ポスト特有のシグナル（写真付きなら本文スペック省略でも通過）
+X_IMAGE_SPEC_SALE_RE = re.compile(
+    r"(?:#売ります|#車売ります|#個人売買|詳細はDM|DM下さい|DMください|DMにて|DMまで|欲しい人いますか|買う人いますか)",
+    re.IGNORECASE,
 )
 
 # 車両スペック記載シグナル
@@ -88,13 +93,7 @@ def now_iso_jst() -> str:
 
 
 def is_nd_roadster_candidate(text: str) -> bool:
-    """
-    ヤフオクやジモティー、メルカリの「ロードスター」出品タイトル・本文から、
-    タイトルに『ND5RC』と書かれていなくても『平成27年式』『1.5』『Sレザーパッケージ』等の
-    ND型ロードスター（2015年/H27年以降）であれば True を返す。
-    旧型（NA/NB/NC・H26年以前）は False を返す。
-    """
-    if not text or "ロードスター" not in text and "ND5RC" not in text.upper():
+    if not text or ("ロードスター" not in text and "ND5RC" not in text.upper()):
         return False
     if OLD_OR_RF_ROADSTER_RE.search(text):
         return False
@@ -104,9 +103,6 @@ def is_nd_roadster_candidate(text: str) -> bool:
 
 
 def tweet_id_to_datetime_jst(tweet_id: str) -> Optional[datetime]:
-    """
-    X (Twitter) の Snowflake ID (64bit整数) から正確な投稿日時 (JST) を算出する。
-    """
     if not tweet_id or not tweet_id.isdigit():
         return None
     try:
@@ -120,9 +116,6 @@ def tweet_id_to_datetime_jst(tweet_id: str) -> Optional[datetime]:
 
 
 def is_recent_tweet(tweet_id: str, max_age_days: int = 14) -> bool:
-    """
-    指定日数（デフォルト14日）以内に投稿された新しいポストかどうかを判定する。
-    """
     if not tweet_id or not tweet_id.isdigit():
         return False
     if len(tweet_id) < 18:
@@ -134,25 +127,35 @@ def is_recent_tweet(tweet_id: str, max_age_days: int = 14) -> bool:
     return age <= timedelta(days=max_age_days)
 
 
-def is_valid_x_car_sale_post(text: str, is_reply: bool = False) -> bool:
+def is_valid_x_car_sale_post(
+    text: str, is_reply: bool = False, has_media: bool = False
+) -> bool:
     """
     Xのポスト本文が「NDロードスター車体の個人売買（売り）」であり、
-    リプライ・日常雑談・買取業者宣伝・パーツ単体売りではないことを厳密に判定する。
+    リプライ・日常雑談・買取業者宣伝・パーツ単体売りではないことを判定する。
+    ★写真付き＋「#売ります」「詳細はDM」「欲しい人いますか」等の投稿は、
+      価格・スペックが画像内に書かれているケースが多いため本文スペック必須チェックを緩和して通過させる。
     """
     if not text or is_reply:
         return False
     stripped = text.strip()
     if stripped.startswith("RT @") or stripped.startswith("@"):
         return False
-    if len(stripped) < 25:
+    if len(stripped) < 18:
         return False
     if not X_VEHICLE_MODEL_RE.search(stripped):
         return False
     if not X_STRONG_SALE_RE.search(stripped):
         return False
-    if not X_CAR_SPEC_SIGNAL_RE.search(stripped):
-        return False
     if X_NOISE_EXCLUDE_RE.search(stripped):
+        return False
+
+    # 写真付き＆DM誘導・売却ハッシュタグ付きなら画像内スペック記載とみなして通過
+    if has_media and X_IMAGE_SPEC_SALE_RE.search(stripped):
+        return True
+
+    # テキストのみの場合は車両スペック記載を必須にして雑談を除外
+    if not X_CAR_SPEC_SIGNAL_RE.search(stripped):
         return False
     return True
 
@@ -211,7 +214,14 @@ def _extract_tweets_from_graphql_payload(payload: Any, max_age_days: int = 14) -
                         legacy.get("in_reply_to_status_id_str")
                         or legacy.get("in_reply_to_user_id_str")
                     )
-                    if is_valid_x_car_sale_post(text, is_reply=is_reply):
+
+                    thumb = ""
+                    entities = legacy.get("extended_entities") or legacy.get("entities") or {}
+                    media_list = entities.get("media", []) if isinstance(entities, dict) else []
+                    if media_list and isinstance(media_list[0], dict):
+                        thumb = str(media_list[0].get("media_url_https", ""))
+
+                    if is_valid_x_car_sale_post(text, is_reply=is_reply, has_media=bool(thumb)):
                         screen_name = "i/web"
                         core = node.get("core", {})
                         if isinstance(core, dict):
@@ -222,12 +232,6 @@ def _extract_tweets_from_graphql_payload(payload: Any, max_age_days: int = 14) -
                                     or user_results.get("legacy", {}).get("screen_name")
                                     or "i/web"
                                 )
-
-                        thumb = ""
-                        entities = legacy.get("extended_entities") or legacy.get("entities") or {}
-                        media_list = entities.get("media", []) if isinstance(entities, dict) else []
-                        if media_list and isinstance(media_list[0], dict):
-                            thumb = str(media_list[0].get("media_url_https", ""))
 
                         post_dt = tweet_id_to_datetime_jst(tweet_id)
                         detected_iso = post_dt.isoformat(timespec="seconds") if post_dt else now_iso_jst()
@@ -273,12 +277,14 @@ async def _fetch_x_via_playwright(
         return results
 
     search_targets = [
+        ("#NDロードスター #売ります", "live"),
+        ("NDロードスター 売ります", "live"),
         ("ロードスター 売り", "live"),
         ("ロードスター 売り", "top"),
+        ("ロードスター 欲しい人", "live"),
         ("ND5RC 車両売却", "live"),
         ("ND5RC 個人売買", "live"),
         ("ND5RC 売ります", "live"),
-        ("NDロードスター 売ります", "live"),
         ("NDロードスター 個人売買", "live"),
         ("#NDロードスター #車売ります", "live"),
     ]
@@ -319,7 +325,7 @@ async def _fetch_x_via_playwright(
 
                 try:
                     await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-                    await page.wait_for_timeout(3200)
+                    await page.wait_for_timeout(3000)
                     await page.mouse.wheel(0, 1000)
                     await page.wait_for_timeout(1200)
 
@@ -342,11 +348,12 @@ async def _fetch_x_via_playwright(
 
                         text_el = await art.query_selector("div[data-testid='tweetText']")
                         text = (await text_el.inner_text()).strip() if text_el else ""
-                        if not is_valid_x_car_sale_post(text):
-                            continue
 
                         img_el = await art.query_selector("div[data-testid='tweetPhoto'] img")
                         thumb = (await img_el.get_attribute("src") or "") if img_el else ""
+
+                        if not is_valid_x_car_sale_post(text, has_media=bool(thumb)):
+                            continue
 
                         post_dt = tweet_id_to_datetime_jst(tweet_id)
                         detected_iso = post_dt.isoformat(timespec="seconds") if post_dt else now_iso_jst()
@@ -554,23 +561,15 @@ async def _fetch_mercari_via_playwright(queries: List[str], min_price_yen: int) 
 
 
 def fetch_mercari(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    メルカリ（自動車本体）からNDロードスター車体を抽出する。
-    「ND5RC」と書かない出品者も拾えるよう「マツダ ロードスター 車体」でも巡回する。
-    """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
     queries = ["ND5RC", "NDロードスター 車体", "マツダ ロードスター 車体", "ロードスター NR-A"]
     return asyncio.run(_fetch_mercari_via_playwright(queries, min_price_yen))
 
 
 def _parse_yahoo_html_or_markdown(content: str, min_price_yen: int) -> List[Dict[str, Any]]:
-    """
-    ヤフオク検索結果のHTMLまたはJina Reader MarkdownからNDロードスター出品を抽出する。
-    """
     results: List[Dict[str, Any]] = []
     seen_ids = set()
 
-    # 1. HTML (li.Product または a[href*='/auction/']) のパース
     soup = BeautifulSoup(content, "html.parser")
     for item in soup.select("li.Product"):
         link_el = item.select_one("a.Product__titleLink")
@@ -608,7 +607,6 @@ def _parse_yahoo_html_or_markdown(content: str, min_price_yen: int) -> List[Dict
             }
         )
 
-    # 2. Markdownリンク形式 [タイトル](https://auctions.yahoo.co.jp/jp/auction/h1252696264) のパース (Jina Reader経由時)
     for m_md in re.finditer(
         r"\[([^\]]{10,160})\]\((https?://auctions\.yahoo\.co\.jp/(?:jp/)?auction/([a-zA-Z0-9]+))\)([^\n]{0,120})",
         content,
@@ -648,10 +646,6 @@ def _fallback_search_multi_engine(
     id_prefix: str,
     min_price_yen: int = 600001,
 ) -> List[Dict[str, Any]]:
-    """
-    GitHub Actionsの海外IPからヤフオク・ジモティーがブロックされる場合の
-    複数キーワード × Bing RSS / Webインデックスによるフォールバック検索。
-    """
     results: List[Dict[str, Any]] = []
     seen_urls = set()
 
@@ -703,17 +697,10 @@ def _fallback_search_multi_engine(
 
 
 def fetch_yahoo_auctions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    ヤフオク（中古車・新車 ＞ マツダ ＞ ロードスター Category: 26360）から
-    「60万円超」「個人出品」のNDロードスターを抽出する。
-    ★ポイント：タイトルに「ND5RC」と書いていない出品（『平成27年式マツダロードスター S1.5レザーパッケージ』等）も
-    すべて拾えるよう、auccat=26360 カテゴリ全体をキーワード制限なしで新着順巡回し、is_nd_roadster_candidate でND型のみ厳選する。
-    """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
     results: List[Dict[str, Any]] = []
     seen_ids = set()
 
-    # 1. ロードスター車体カテゴリ全体 (キーワード指定なし・60万円超・新着順) + 個人出品フィルタ
     target_urls = [
         f"https://auctions.yahoo.co.jp/category/leaf/26360/?min={min_price_yen}&abatch=2&istatus=0&s1=new&o1=d",
         f"https://auctions.yahoo.co.jp/search/search?auccat=26360&min={min_price_yen}&abatch=2&istatus=0&s1=new&o1=d",
@@ -721,7 +708,6 @@ def fetch_yahoo_auctions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
     for url in target_urls:
-        # 経路A: 直接HTTPリクエスト
         try:
             resp = requests.get(url, headers=DEFAULT_HEADERS, timeout=12)
             if resp.status_code == 200 and "Product" in resp.text:
@@ -735,7 +721,6 @@ def fetch_yahoo_auctions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         if results:
             break
 
-        # 経路B: Jina Reader Proxy経由 (海外IPのGitHub ActionsからでもYahoo! JAPANのHTML/Markdownを取得可能)
         try:
             jina_url = f"https://r.jina.ai/{url}"
             resp_jina = requests.get(
@@ -754,7 +739,6 @@ def fetch_yahoo_auctions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         if results:
             break
 
-    # 経路C: Bing RSS マルチキーワード検索（「ND5RC」を含まない「平成27年 ロードスター」「ロードスター レザーパッケージ」等も網羅）
     if not results:
         fallback_kws = [
             "ND5RC ロードスター",
@@ -833,10 +817,6 @@ def _parse_jmty_html_or_markdown(content: str, min_price_yen: int) -> List[Dict[
 
 
 def fetch_jmty(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    ジモティー（中古車 ＞ マツダ）からNDロードスター車体を抽出する。
-    「ND」と書かない出品者も拾えるよう「ロードスター」全体で検索し、is_nd_roadster_candidate でND型のみ厳選する。
-    """
     min_price_yen = int(float(config.get("monitoring", {}).get("min_price_man", 60)) * 10000) + 1
     search_url = (
         f"https://jmty.jp/all/car-maz/g-all/a-all"
@@ -845,7 +825,6 @@ def fetch_jmty(config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     results: List[Dict[str, Any]] = []
 
-    # 経路A: Jina Reader Proxy経由 (ジモティーの海外IP 403ブロックを回避)
     try:
         jina_url = f"https://r.jina.ai/{search_url}"
         resp_jina = requests.get(
@@ -858,7 +837,6 @@ def fetch_jmty(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    # 経路B: Bing RSS マルチキーワード検索
     if not results:
         fallback_kws = [
             "ND5RC ロードスター",
@@ -880,9 +858,6 @@ def fetch_jmty(config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def fetch_all_sources(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    4サイトすべてから出品リストを収集して結合する（Xを最優先で先頭に配置）。
-    """
     items: List[Dict[str, Any]] = []
     items.extend(fetch_x_posts(config))
     items.extend(fetch_yahoo_auctions(config))
