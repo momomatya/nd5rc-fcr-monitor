@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 NDロードスター（FCRカップ戦仕様）マッチ度計算・除外判定・興味なし（通知ブロック）判定モジュール
-（「平成27年」「平成28年」「平成29年」「1.5」「手動ソフトトップ」表記にも対応）
+（「平成27年」「1.5」表記および「X写真付き個人売買・要DM確認」自動Bランク加点対応）
 """
 
 import re
@@ -35,12 +35,14 @@ TARGET_MODEL_YEAR_SYNONYMS = [
     "Ｓ1.5",
 ]
 
+# Xの「写真付き＋DM案内/#売ります」個人売買ポスト判定パターン
+X_PHOTO_DM_SALE_RE = re.compile(
+    r"(?:#売ります|#車売ります|#個人売買|詳細はDM|DM下さい|DMください|DMにて|DMまで|欲しい人いますか|買う人いますか)",
+    re.IGNORECASE,
+)
+
 
 def normalize_title_signature(title: str) -> str:
-    """
-    再出品・値下げ再投稿でも同一車両と判定できるよう、
-    記号・空白・価格表現を除いた正規化シグネチャを生成する。
-    """
     cleaned = re.sub(r"(?:手元\s*)?\d{2,4}(?:\.\d+)?\s*万(?:円)?", "", title or "")
     cleaned = re.sub(r"[\s　【】\[\]（）()!！?？・/／,，.。:：\-〜~]+", "", cleaned)
     return cleaned.upper()[:36]
@@ -101,7 +103,7 @@ def extract_price_man(text: str, raw_price_yen: Optional[int] = None) -> Tuple[O
         return val, f"{disp_num}万円"
 
     if any(k in normalized for k in ["DM", "ＤＭ", "相談", "応談", "メッセージ"]):
-        return None, "価格DM・要相談"
+        return None, "価格DM・要確認"
 
     return None, "価格記載なし"
 
@@ -153,7 +155,7 @@ def extract_vehicle_specs(text: str, existing_specs: Optional[Dict[str, str]] = 
         "year": year_str,
         "grade": grade_str,
         "mileage": mileage_str,
-        "shaken": "本文参照",
+        "shaken": "本文・画像参照",
         "lsd": lsd_str,
         "rollbar": rollbar_str,
         "wheel": wheel_str,
@@ -212,6 +214,7 @@ def score_vehicle(
 ) -> Dict[str, Any]:
     title = item.get("title", "")
     description = item.get("description", "")
+    source = item.get("source", "")
     full_text = f"{title} {description}"
     full_text_upper = full_text.upper()
 
@@ -273,6 +276,25 @@ def score_vehicle(
                 "label": f"{int(pb_min)}〜{int(pb_max)}万円圏内",
                 "points": pb_pts,
                 "category": price_bonus_cfg.get("category", "価格ボーナス"),
+            }
+        )
+
+    # ★Xの写真付き個人売買（画像内に価格・スペックが書かれているパターン）への自動Bランク加点
+    raw_thumb = str(item.get("thumbnail") or "")
+    has_real_photo = raw_thumb.startswith("http")
+    if (
+        source == "X"
+        and has_real_photo
+        and raw_score < 15
+        and X_PHOTO_DM_SALE_RE.search(full_text)
+    ):
+        raw_score += 15
+        badges.append(
+            {
+                "id": "x_photo_dm_sale",
+                "label": "X写真付き個人売買・要画像/DM確認",
+                "points": 15,
+                "category": "X個人売買速報",
             }
         )
 
