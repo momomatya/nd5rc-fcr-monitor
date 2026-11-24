@@ -1,12 +1,12 @@
 {
-  "last_updated": "2026-11-25T07:13:31+09:00",
+  "last_updated": "2026-11-25T08:14:00+09:00",
   "seen_ids": [
-    "x_2124109857985064979",
-    "mercari_m66968985040",
     "x_2124805845397782681",
+    "mercari_m66968985040",
     "mercari_m71181867718",
     "x_2121961318504906805",
-    "x_2124111270496641402"
+    "x_2124111270496641402",
+    "x_2124109857985064979"
   ],
   "ignored_ids": [
     "jmty_tokyo_car_992817",
@@ -124,44 +124,6 @@
     "個人売買H28年式ND5RCロードスターNRA6MT富士チャンピオンレー"
   ],
   "vehicles": [
-    {
-      "id": "x_2124805845397782681",
-      "source": "X",
-      "title": "【X個人売買】ロードスター欲しい人いますか？",
-      "description": "ロードスター欲しい人いますか？\n折角なら業者より乗りたい人に届いて欲しいと思います。\n\n詳細はDM下さい。\n\n #NDロードスター  #売ります  #スポーツカー https://t.co/wn3DBFTzWo",
-      "raw_price_yen": null,
-      "url": "https://x.com/natsukick1222/status/2124805845397782681",
-      "thumbnail": "https://pbs.twimg.com/media/HXzTp1MagAAY-8u.jpg",
-      "detected_at": "2026-11-23T19:02:45+09:00",
-      "price_man": null,
-      "price_display": "価格DM・要確認",
-      "favorite": false,
-      "ignored": false,
-      "title_signature": "X個人売買ロードスター欲しい人いますか",
-      "specs": {
-        "year": "不明（要確認）",
-        "grade": "6MT（グレード要確認）",
-        "mileage": "記載なし",
-        "shaken": "本文・画像参照",
-        "lsd": "未記載 / 純正",
-        "rollbar": "未装着 / 未記載",
-        "wheel": "純正 / その他",
-        "location": "出品ページ参照"
-      },
-      "score": 15,
-      "raw_score": 15,
-      "rank": "B",
-      "badges": [
-        {
-          "id": "x_photo_dm_sale",
-          "label": "X写真付き個人売買・要画像/DM確認",
-          "points": 15,
-          "category": "X個人売買速報"
-        }
-      ],
-      "skip_reason": null,
-      "notified_line": false
-    },
     {
       "id": "mercari_m66968985040",
       "source": "メルカリ",
